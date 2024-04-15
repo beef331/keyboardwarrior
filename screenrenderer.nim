@@ -115,23 +115,18 @@ proc upload*(buffer: var Buffer, dt: float32) =
   var rendered = false
   for ind in buffer.cameraPos .. buffer.lines.high:
     for glyph in buffer.lines[ind]:
-      rendered = true
-
       let
         entry = buffer.atlas.runeEntry(glyph.rune)
-        theFg = buffer.getColorIndex:
-          mixCol(glyph.properties.foreground, colBlack):
-            if glyph.properties.blinkSpeed != 0 and round(buffer.time * glyph.properties.blinkSpeed).int mod 2 == 0:
-              b
-            else:
-              a
+        theFg = buffer.getColorIndex(glyph.properties.foreground)
         theBg = buffer.getColorIndex(glyph.properties.background)
         size = entry.rect.wh / scrSize
       let
         sineOffset = sin((buffer.time + x) * glyph.properties.sineSpeed) * glyph.properties.sineStrength * size.y
         shakeOffsetX = buffer.noise.evaluate(buffer.time + x * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.x
         shakeOffsetY = buffer.noise.evaluate(buffer.time + y * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.y
-      buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: uint32 entry.id, matrix:  translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
+      if glyph.properties.blinkSpeed == 0 or round(buffer.time * glyph.properties.blinkSpeed).int mod 2 != 0:
+        rendered = true
+        buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: uint32 entry.id, matrix:  translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
       if glyph.rune == Rune('\n'):
         y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
         x = -1f
