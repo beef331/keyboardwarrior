@@ -1,3 +1,4 @@
+import std/[strutils, strscans]
 type
   BayKind = enum
     Nothing
@@ -96,32 +97,64 @@ import pkg/truss3D, pkg/truss3D/[inputs]
 import pkg/vmath
 
 var
-  buffer = Buffer(pixelWidth: 320, pixelHeight: 240)
+  buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: colWhite))
   fontPath = "PublicPixel.ttf"
   input = ""
+
 
 proc init =
   buffer.initResources(fontPath)
   startTextInput(default(inputs.Rect), "")
-  buffer.writeOver(0, ">", colWhite)
+  buffer.put(">")
+
+proc handleTextChange(buff: var Buffer, input: string): bool =
+  result = input.startsWith "text "
+  var toSetField, val: string
+  if input.scanf("text $+ $+", toSetField, val):
+    var foundName = false
+    for name, field in buff.properties.fieldPairs:
+      if name.cmpIgnoreStyle(toSetField) == 0:
+        foundName = true
+        try:
+          when field is SomeFloat:
+            field = parseFloat(val)
+          elif field is Color:
+            field = parseColor(val)
+          buffer.put ($buffer.properties).replace(",", ",\n") & "\n"
+        except CatchableError as e:
+          buffer.put(e.msg & "\n", GlyphProperties(foreground: colRed))
+    if not foundName:
+      buffer.put("No property named `$#`\n" % toSetField, GlyphProperties(foreground: colRed))
+  elif result:
+    buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: colRed))
+
 
 
 proc update(dt: float32) =
   if isTextInputActive():
     if inputText().len > 0:
       input.add inputText()
-      buffer.writeOver(buffer.entryIndex, ">" & input, colWhite)
+      buffer.clearLine()
+      buffer.put(">" & input)
       setInputText("")
     if KeyCodeReturn.isDownRepeating():
-      buffer.put("\n>", colWhite)
+      buffer.put "\n"
+      if not handleTextChange(buffer, input):
+        buffer.put("Incorrect command\n", GlyphProperties(foreground: colRed))
+      input = ""
+      buffer.put(">")
+    if KeyCodeBackspace.isDownRepeating() and input.len > 0:
+      input.setLen(input.high)
+      buffer.clearLine()
+      buffer.put(">" & input)
+
   if KeyCodeUp.isDownRepeating():
-    input = ""
-    buffer.put("\n>", colWhite)
+    buffer.scrollUp()
 
   if KeyCodeDown.isDownRepeating():
-    buffer.writeOver(buffer.entryIndex, ">" & input, colWhite)
+    buffer.scrollDown()
 
-  buffer.upload()
+  buffer.upload(dt)
 
 proc draw =
   buffer.render()

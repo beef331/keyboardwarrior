@@ -1,6 +1,6 @@
 import pkg/truss3D/[models, shaders, inputs, fontatlaser, instancemodels]
-import pkg/[vmath, truss3D, pixie]
-import std/[unicode, colors, tables, strutils, enumerate]
+import pkg/[vmath, truss3D, pixie, opensimplexnoise]
+import std/[unicode, colors, tables, strutils, enumerate, math]
 export colors
 
 type
@@ -17,38 +17,47 @@ type
     model: InstancedModel[RenderInstance]
     shader: Shader
 
-  GlyphFlag* = enum
-    Shake # Moves around
-    Dim
-    Bold
-    Blink
-
   GlyphProperties* = object
-    flag*: set[GlyphFlag]
+    shakeSpeed*: float32
+    shakeStrength*: float32
+    blinkSpeed*: float32
+    sineSpeed*: float32
+    sineStrength*: float32
+    foreground*, background*: colors.Color
 
   Glyph* = object
     rune: Rune
-    foreground, background: colors.Color
+    properties: GlyphProperties
 
   Line = object
     len: int
     glyphs: array[128, Glyph]
 
+iterator items(line: Line): Glyph =
+  for i in 0..<line.len:
+    yield line.glyphs[i]
+
+iterator mitems(line: var Line): var Glyph =
+  for i in 0..<line.len:
+    yield line.glyphs[i]
+
+type
   Buffer* = object
-    glyphs: seq[Glyph]
+    lines: seq[Line]
     pixelHeight*: 0..1024
     pixelWidth*: 0..1024
     lineHeight: int
     lineWidth: int
     cameraPos: int
-    entryPos: int
-    linesAdded: int
     atlas: FontAtlas
     shader: Shader
     fontTarget: UiRenderTarget
     colors: seq[Vec4]
     colorSsbo: SSBO[seq[Vec4]]
     colorInd: Table[colors.Color, int]
+    time: float32
+    properties*: GlyphProperties ## These are for if you do not provide `GlyphProperties`
+    noise: OpenSimplex
 
 const
   guiVert = ShaderPath"text.vert.glsl"
@@ -67,8 +76,10 @@ proc initResources*(buffer: var Buffer, fontPath: string) =
   buffer.atlas.font.size = 15
 
   let charEntry = buffer.atlas.runeEntry(Rune('+'))
-  buffer.lineWidth = buffer.pixelWidth div charEntry.rect.w.int
-  buffer.lineHeight = buffer.pixelHeight div charEntry.rect.h.int
+  buffer.lineWidth = buffer.pixelWidth div charEntry.rect.w.int * 2 - 1
+  buffer.lineHeight = buffer.pixelHeight div charEntry.rect.h.int * 2 - 1
+  buffer.lines.add Line()
+  buffer.noise = newOpenSimplex()
 
 proc getColorIndex(buffer: var Buffer, color: colors.Color): int32 =
   if color notin buffer.colorInd:
@@ -79,35 +90,58 @@ proc getColorIndex(buffer: var Buffer, color: colors.Color): int32 =
   else:
     buffer.colorInd[color]
 
-proc upload*(buffer: var Buffer) =
-  let
-    scrSize = vec2 screenSize()
-    halfSize = scrSize / 2
+template mixCol(argA, argB: colors.Color, body: untyped): untyped =
+  template `><` (x: untyped): untyped =
+    # keep it in the range 0..255
+    block:
+      var y = x # eval only once
+      if y >% 255:
+        y = if y < 0: 0 else: 255
+      y
+
+  template mixxer(a {.inject.}: int, b {.inject.}: int): int =
+    body
+
+  var colA = argA.extractRgb
+  for _, fieldA, fieldB in fieldPairs(colA, argB.extractRgb):
+    fieldA = `><`(mixxer(fieldA, fieldB))
+  rgb(colA.r, colA.g, colA.b)
+
+proc upload*(buffer: var Buffer, dt: float32) =
+  buffer.time += dt
+  let scrSize = vec2 screenSize()
   var (x, y) = (-1f, 1f - buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y)
   buffer.fontTarget.model.clear()
-  var linesRendered = 0
-  for ind in buffer.cameraPos .. buffer.glyphs.high:
-    let
-      glyph = buffer.glyphs[ind]
-      entry = buffer.atlas.runeEntry(glyph.rune)
-      fg = buffer.getColorIndex(glyph.foreground)
-      bg = buffer.getColorIndex(glyph.background)
-      size = entry.rect.wh / scrSize
+  var rendered = false
+  for ind in buffer.cameraPos .. buffer.lines.high:
+    for glyph in buffer.lines[ind]:
+      rendered = true
 
-    buffer.fontTarget.model.push FontRenderObj(fg: fg, bg: bg, fontIndex: uint32 entry.id, matrix:  translate(vec3(x, y, 0)) * scale(vec3(size, 1)))
-    if glyph.rune == Rune('\n'):
-      y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
-      inc linesRendered
-      if linesRendered > buffer.lineHeight:
+      let
+        entry = buffer.atlas.runeEntry(glyph.rune)
+        theFg = buffer.getColorIndex:
+          mixCol(glyph.properties.foreground, colBlack):
+            if glyph.properties.blinkSpeed != 0 and round(buffer.time * glyph.properties.blinkSpeed).int mod 2 == 0:
+              b
+            else:
+              a
+        theBg = buffer.getColorIndex(glyph.properties.background)
+        size = entry.rect.wh / scrSize
+      let
+        sineOffset = sin((buffer.time + x) * glyph.properties.sineSpeed) * glyph.properties.sineStrength * size.y
+        shakeOffsetX = buffer.noise.evaluate(buffer.time + x * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.x
+        shakeOffsetY = buffer.noise.evaluate(buffer.time + y * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.y
+      buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: uint32 entry.id, matrix:  translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
+      if glyph.rune == Rune('\n'):
+        y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
+        x = -1f
         break
-      x = -1f
-    elif glyph.rune.isWhiteSpace:
-      x += buffer.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
-    else:
-      x += size.x
+      elif glyph.rune.isWhiteSpace:
+        x += buffer.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
+      else:
+        x += size.x
 
-
-  if buffer.glyphs.len > 0 and (buffer.cameraPos..buffer.glyphs.high).len > 0:
+  if rendered:
     buffer.colors.copyTo buffer.colorSsbo
     buffer.fontTarget.model.reuploadSsbo()
 
@@ -121,83 +155,62 @@ proc render*(buffer: Buffer) =
     buffer.fontTarget.model.render()
     glDisable(GlBlend)
 
-proc writeOver*(buff: var Buffer, start: int, str: string, foreground: colors.Color, background = colBlack) =
+proc clearLine*(buff: var Buffer, lineNum: int) =
   ## Writes over `start`
-  let strLen = str.runeLen
-  if start + strLen >= buff.glyphs.len:
-    buff.glyphs.setLen(strLen)
+  buff.lines[lineNum].len = 0
 
-  for i, rune in enumerate str.runes:
-    buff.glyphs[start + i] = Glyph(rune: rune, foreground: foreground, background: background)
+proc clearLine*(buff: var Buffer) =
+  ## Writes over `start`
+  buff.lines[^1].len = 0
 
-proc put*(buff: var Buffer, s: string, foreground: colors.Color, background = colBlack) =
+proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
   for rune in s.runes:
-    buff.glyphs.add Glyph(rune: rune, foreground: foreground, background: background)
+    buff.lines[^1].glyphs[buff.lines[^1].len] = Glyph(rune: rune, properties: props)
+    inc buff.lines[^1].len
     if rune == Rune '\n':
-      inc buff.linesAdded
-      buff.entryPos = buff.glyphs.len
+      buff.lines.add Line()
 
-  if buff.linesAdded >= buff.lineHeight:
-    var found = 0
-    for ind in buff.cameraPos .. buff.glyphs.high:
-      let glyph = buff.glyphs[ind]
-      if glyph.rune == Rune '\n':
-        inc found
-      if buff.linesAdded - found < buff.lineHeight:
-        buff.cameraPos = ind + 1
-        break
-    buff.linesAdded -= found
+  if buff.lines.high - buff.cameraPos > buff.lineHeight:
+    buff.cameraPos = buff.lines.high - buff.lineHeight
 
-proc entryIndex*(buff: var Buffer): int = buff.entryPos
+proc put*(buff: var Buffer, s: string) =
+  put buff, s, buff.properties
+
 
 proc scrollUp*(buff: var Buffer) =
-  for ind in countDown(buff.cameraPos - 2, 0):
-    if (buff.glyphs[ind].rune == Rune '\n'):
-      buff.cameraPos = ind + 1
-      return
-    if ind == 0:
-      buff.cameraPos = 0
+  buff.cameraPos = max(buff.cameraPos - 1, 0)
 
 proc scrollDown*(buff: var Buffer) =
-  if buff.cameraPos + 1 >= buff.entryPos:
-    buff.cameraPos = buff.entryPos
-
-  for ind in countUp(buff.cameraPos, buff.entryPos):
-    if buff.glyphs[ind].rune == Rune '\n':
-      buff.cameraPos = ind + 1
-      return
-
+  buff.cameraPos = min(buff.cameraPos + 1, buff.lines.high)
 
 when isMainModule:
   var
-    buffer = Buffer(pixelWidth: 320, pixelHeight: 240)
+    buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: colWhite, background: colBlack))
     fontPath = "PublicPixel.ttf"
 
   proc init =
     buffer.initResources(fontPath)
     startTextInput(default(inputs.Rect), "")
-    buffer.put("hello world!", colGreen, colYellow)
-    buffer.put(" bleh", colRed)
-    buffer.put("\nHello travllllllerrrrs", colPurple, colBeige)
-    buffer.put("\n" & "―".repeat(30), colRed)
-    buffer.put("\n>", colWhite)
+    buffer.put("hello world!", GlyphProperties(foreground: colGreen, background: colYellow, sineSpeed: 5f, sineStrength: 1f))
+    buffer.put(" bleh \n\n", GlyphProperties(foreground: colGreen))
+    buffer.put("\nHello travllllllerrrrs", GlyphProperties(foreground: colPurple, background: colBeige, shakeSpeed: 5f, shakeStrength: 0.25f))
+    buffer.put("\n" & "―".repeat(30), GlyphProperties(foreground: colRed, blinkSpeed: 5f))
+    buffer.put("\n" & "―".repeat(30), GlyphProperties(foreground: colWhite, blinkSpeed: 1f))
+    buffer.put("\n>")
 
 
   proc update(dt: float32) =
     if isTextInputActive():
       if inputText().len > 0:
-        buffer.put inputText(), colWhite
+        buffer.put inputText()
         setInputText("")
-
-      if KeycodeBackspace.isDownRepeating() and buffer.glyphs.high >= 0:
-        buffer.glyphs.setLen(buffer.glyphs.high)
-      elif KeyCodeReturn.isDownRepeating():
-        buffer.put("\n>", colWhite)
+      if KeyCodeReturn.isDownRepeating():
+        buffer.put("\n>")
     if KeyCodeUp.isDownRepeating():
       buffer.scrollUp()
     if KeyCodeDown.isDownRepeating():
       buffer.scrollDown()
-    buffer.upload()
+    buffer.upload(dt)
 
   proc draw =
     buffer.render()
