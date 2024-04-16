@@ -27,17 +27,20 @@ proc insStr(s: sink string): InsensitiveString = InsensitiveString(s)
 proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
   let oldProp = props
   if node.kind == xnElement:
-    for name, field in props.fieldPairs:
-      let val = node.attr(name.toLowerAscii())
-      if val != "":
-        when field is SomeFloat:
-          field = parseFloat(val)
-        elif field is Color:
-          field = parseHtmlColor(val)
-    for child in node:
-      buffer.printTree(child, props)
+    if node.tag == "br":
+      buffer.put "\n", props
+    else:
+      for name, field in props.fieldPairs:
+        let val = node.attr(name.toLowerAscii())
+        if val != "":
+          when field is SomeFloat:
+            field = parseFloat(val)
+          elif field is Color:
+            field = parseHtmlColor(val)
+      for child in node:
+        buffer.printTree(child, props)
   else:
-    buffer.put(node.text, props)
+    buffer.put(node.text.replace("\n"), props)
   props = oldProp
 
 
@@ -98,6 +101,14 @@ commands[insStr"sensors"] = proc(buffer: var Buffer, _: string) =
   inDummyProgram = true
   (dummyX, dummyY) = buffer.getPosition()
   buffer.toBottom()
+
+commands[insStr"event"] = proc(buffer: var Buffer, str: string) =
+  var name = ""
+  if str.scanf("$s$+", name):
+    buffer.displayEvent(name & ".html")
+  else:
+    buffer.put("Failed to display event\n", GlyphProperties(foreground: red))
+
 
 
 proc init =

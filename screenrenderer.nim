@@ -189,8 +189,9 @@ proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
   if buff.lines.len == 0:
     buff.lines.add Line()
   for rune in s.runes:
-    buff.lines[^1].glyphs[buff.lines[^1].len] = Glyph(rune: rune, properties: props)
-    inc buff.lines[^1].len
+    if buff.lines[^1].len < buff.lineWidth:
+      buff.lines[^1].glyphs[buff.lines[^1].len] = Glyph(rune: rune, properties: props)
+      inc buff.lines[^1].len
     if rune == Rune '\n':
       buff.lines.add Line()
 
