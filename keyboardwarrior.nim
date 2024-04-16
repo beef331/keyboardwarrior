@@ -72,7 +72,7 @@ var
 var validNames {.compileTime.}: seq[string]
 proc handleTextChange(buff: var Buffer, input: string) =
   var toSetField, val: string
-  if input.scanf("$s$w$s$w", toSetField, val):
+  if input.scanf("$s$w$s$+", toSetField, val):
     var foundName = false
     for name, field in buff.properties.fieldPairs:
       static: validNames.add name
@@ -103,17 +103,24 @@ commands[insStr"sensors"] = proc(buffer: var Buffer, _: string) =
   buffer.toBottom()
 
 commands[insStr"event"] = proc(buffer: var Buffer, str: string) =
-  var name = ""
+  var
+    name = ""
+    errored = false
   if str.scanf("$s$+", name):
-    buffer.displayEvent(name & ".html")
+    try:
+      buffer.displayEvent(name & ".html")
+    except:
+      errored = true
   else:
+    errored = true
+
+  if errored:
     buffer.put("Failed to display event\n", GlyphProperties(foreground: red))
 
 
 
 proc init =
   buffer.initResources(fontPath, false)
-  buffer.displayEvent("event.html")
   startTextInput(default(inputs.Rect), "")
   buffer.put(">")
 
@@ -202,19 +209,19 @@ proc update(dt: float32) =
 
 proc draw =
   var
-    projMatrix = perspective(60f, screenSize().x / screenSize().y, 0.1, 50)
+    projMatrix = perspective(50f, screenSize().x / screenSize().y, 0.1, 50)
     viewMatrix = (vec3(0, 0, -1).toAngles(vec3(0)).fromAngles())
 
   buffer.render()
   if buffer.usingFrameBuffer:
     glEnable(GlDepthTest)
     with coverShader:
-      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1))))
+      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.6, -1))))
       render(coverModel)
 
     with screenShader:
       screenShader.setUniform("tex", buffer.getFrameBufferTexture())
-      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1))))
+      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.6, -1))))
       render(screenModel)
 
 initTruss("Something", ivec2(buffer.pixelWidth, buffer.pixelHeight), init, update, draw, vsync = true)
