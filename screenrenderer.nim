@@ -189,12 +189,17 @@ proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
 proc put*(buff: var Buffer, s: string) =
   put buff, s, buff.properties
 
-
 proc scrollUp*(buff: var Buffer) =
   buff.cameraPos = max(buff.cameraPos - 1, 0)
 
 proc scrollDown*(buff: var Buffer) =
   buff.cameraPos = min(buff.cameraPos + 1, buff.lines.high)
+
+proc toTop*(buffer: var Buffer) =
+  buffer.cameraPos = 0
+
+proc toBottom*(buffer: var Buffer) =
+  buffer.cameraPos = buffer.lines.high
 
 when isMainModule:
   const clear = color(0, 0, 0, 0)

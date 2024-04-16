@@ -1,110 +1,27 @@
-import std/[strutils, strscans]
-type
-  BayKind = enum
-    Nothing
-    Rocket
-    Turret
-
-  AmmoKind = enum
-    Bullet
-    Rail
-    Nuclear
-
-  EntityFlag = enum
-    Powered
-    Damaged
-    Jammed
-
-  EntityFlags = set[EntityFlag]
-
-  Entity = object of RootObj
-    name: string
-
-  PoweredEntity = object of Entity
-    flags: EntityFlags
-
-  LimitedVal[T] = object
-    min, max: T
-    val: T
-
-  Bay = object of PoweredEntity
-    target: string
-    case kind: BayKind
-    of Turret, Rocket:
-      ammo: LimitedVal[int]
-      ammoKind: AmmoKind
-    else:
-      discard
-
-  Thing = object of Entity
-    volume: int
-
-  Room = object of PoweredEntity
-    position: int
-    inventory: seq[Thing]
-
-  DoorState = enum
-    Closed
-    Opened
-
-  Door = object of PoweredEntity
-    state: DoorState
-
-  SystemKind = enum
-    Networking
-    AutoTargetting
-    AutoLoader
-    JamProtection
-    Sensors
-
-
-  ShipSystem = object of PoweredEntity
-    case kind: SystemKind
-    of Sensors:
-      sensorRange: int
-    else: discard
-
-
-  Ship = object of Entity
-    weaponBays: seq[Bay]
-    rooms: seq[Room]
-    door: seq[Door]
-    systems: seq[ShipSystem]
-    fuel: LimitedVal[int]
-
-proc hasSystem(ship: Ship, kind: SystemKind): bool =
-  for system in ship.systems:
-    if system.kind == kind:
-      return true
-
-
-proc load(ship: var Ship, name: string, kind: AmmoKind) =
-  for bay in ship.weaponBays.mitems:
-    if bay.name == name:
-      if bay.ammo.val == 0:
-        ## load the ammo
-      elif not ship.hasSystem(JamProtection):
-        bay.flags.incl Jammed
-
-proc unjam(ship: var Ship, name: string) =
-  for bay in ship.weaponBays.mitems:
-    if bay.name == name:
-      bay.flags.excl Jammed
-
-
+import std/[strutils, strscans, tables, xmltree, htmlparser, hashes]
 import screenrenderer
 import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]
 
-var
-  buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: parseHtmlColor("White")))
-  fontPath = "PublicPixel.ttf"
-  input = ""
+type
+  InsensitiveString = distinct string
+  CommandHandler = proc(buffer: var Buffer, input: string) {.nimcall.}
 
-const red = parseHtmlColor("Red")
+converter toString(str: InsensitiveString): lent string = string(str)
+converter toString(str: var InsensitiveString): var string = string(str)
 
+proc `==`(a, b: InsensitiveString): bool =
+  cmpIgnoreStyle(a, b) == 0
 
-import std/[xmltree, htmlparser, strutils]
+proc hash(str: InsensitiveString): Hash =
+  for ch in str.items:
+    let ch = ch.toLowerAscii()
+    if ch != '_':
+      result = result !& hash(ch)
+
+  result = !$result
+
+proc insStr(s: sink string): InsensitiveString = InsensitiveString(s)
 
 proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
   let oldProp = props
@@ -135,11 +52,43 @@ proc displayEvent(buffer: var Buffer, eventPath: string) =
         field = parseHtmlColor(val)
   buffer.printTree(xml[0], props)
 
+const red = parseHtmlColor("Red")
 
 var
+  buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: parseHtmlColor("White")))
+  fontPath = "PublicPixel.ttf"
+  input = ""
+  commands = initTable[InsensitiveString, CommandHandler]()
   screenModel, coverModel: Model
   coverTex: Texture
   screenShader, coverShader: Shader
+
+proc handleTextChange(buff: var Buffer, input: string) =
+  var toSetField, val: string
+  if input.scanf("$+ $+", toSetField, val):
+    var foundName = false
+    for name, field in buff.properties.fieldPairs:
+      if name.cmpIgnoreStyle(toSetField) == 0:
+        foundName = true
+        try:
+          when field is SomeFloat:
+            field = parseFloat(val)
+          elif field is Color:
+            field = parseHtmlColor(val)
+          buffer.put ($buffer.properties).replace(",", ",\n") & "\n"
+        except CatchableError as e:
+          buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
+    if not foundName:
+      buffer.put("No property named `$#`\n" % toSetField, GlyphProperties(foreground: red))
+  else:
+    buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: red))
+
+
+commands[insStr"toggle3d"] = proc(buffer: var Buffer, _: string) =
+  buffer.toggleFrameBuffer()
+commands[insStr"text"] = handleTextChange
+commands[insStr"clear"] = proc(buffer: var Buffer, _: string) =
+  buffer.toBottom()
 
 
 proc init =
@@ -158,27 +107,20 @@ proc init =
   coverShader = loadShader(ShaderPath"vert.glsl", ShaderPath"frag.glsl")
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
 
+proc dispatchCommand(buffer: var Buffer, input: string) =
+  if input.len > 0:
+    let
+      ind =
+        if (let ind = input.find(' '); ind) != -1:
+          ind - 1
+        else:
+          input.high
+      command = insStr input[0..ind]
+    if command in commands:
+      commands[command](buffer, input[min(ind + 2, input.high) .. input.high])
+    else:
+      buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
 
-proc handleTextChange(buff: var Buffer, input: string): bool =
-  result = input.startsWith "text "
-  var toSetField, val: string
-  if input.scanf("text $+ $+", toSetField, val):
-    var foundName = false
-    for name, field in buff.properties.fieldPairs:
-      if name.cmpIgnoreStyle(toSetField) == 0:
-        foundName = true
-        try:
-          when field is SomeFloat:
-            field = parseFloat(val)
-          elif field is Color:
-            field = parseHtmlColor(val)
-          buffer.put ($buffer.properties).replace(",", ",\n") & "\n"
-        except CatchableError as e:
-          buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
-    if not foundName:
-      buffer.put("No property named `$#`\n" % toSetField, GlyphProperties(foreground: red))
-  elif result:
-    buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: red))
 
 proc update(dt: float32) =
   if isTextInputActive():
@@ -189,10 +131,7 @@ proc update(dt: float32) =
       setInputText("")
     if KeyCodeReturn.isDownRepeating():
       buffer.put "\n"
-      if input == "toggle3D":
-        buffer.toggleFrameBuffer()
-      elif not handleTextChange(buffer, input):
-        buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
+      dispatchCommand(buffer, input)
       input = ""
       buffer.put(">")
     if KeyCodeBackspace.isDownRepeating() and input.len > 0:
