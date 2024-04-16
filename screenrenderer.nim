@@ -1,5 +1,5 @@
-import pkg/truss3D/[models, shaders, inputs, fontatlaser, instancemodels]
-import pkg/[vmath, truss3D, pixie, opensimplexnoise, chroma]
+import pkg/truss3D/[models, shaders, inputs, fontatlaser, instancemodels, textures]
+import pkg/[vmath, truss3D, pixie, opensimplexnoise, chroma, opengl]
 import std/[unicode, tables, strutils, enumerate, math]
 export chroma
 
@@ -58,12 +58,15 @@ type
     time: float32
     properties*: GlyphProperties ## These are for if you do not provide `GlyphProperties`
     noise: OpenSimplex
+    useFrameBuffer: bool
+    frameBufferSetup: bool
+    frameBuffer: FrameBuffer
 
 const
   guiVert = ShaderPath"text.vert.glsl"
   guiFrag = ShaderPath"text.frag.glsl"
 
-proc initResources*(buffer: var Buffer, fontPath: string) =
+proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false) =
   buffer.atlas = FontAtlas.init(1024f, 1024f, 3f, readFont(fontPath))
   buffer.shader = loadShader(guiVert, guiFrag)
   var modelData: MeshData[Vec2]
@@ -80,6 +83,12 @@ proc initResources*(buffer: var Buffer, fontPath: string) =
   buffer.lineHeight = buffer.pixelHeight div charEntry.rect.h.int * 2 - 1
   buffer.lines.add Line()
   buffer.noise = newOpenSimplex()
+  if useFrameBuffer:
+    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
+    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
+    buffer.useFrameBuffer = true
+    buffer.frameBufferSetup = true
+
 
 proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   if color notin buffer.colorInd:
@@ -89,9 +98,24 @@ proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   else:
     buffer.colorInd[color]
 
+proc getFrameBufferTexture*(buffer: Buffer): Texture = buffer.frameBuffer.colourTexture
+
+proc toggleFrameBuffer*(buffer: var Buffer) =
+  buffer.useFrameBuffer = not buffer.useFrameBuffer
+  if not buffer.framebufferSetup: # TODO: framebuffer.id != 0
+    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
+    buffer.frameBufferSetup = true
+
+proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
+
 proc upload*(buffer: var Buffer, dt: float32) =
   buffer.time += dt
-  let scrSize = vec2 screenSize()
+  let scrSize =
+    if buffer.useFrameBuffer:
+      vec2(buffer.pixelWidth.float32, buffer.pixelHeight.float32)
+    else:
+      vec2 screenSize()
+
   var (x, y) = (-1f, 1f - buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y)
   buffer.fontTarget.model.clear()
   var rendered = false
@@ -121,16 +145,28 @@ proc upload*(buffer: var Buffer, dt: float32) =
   if rendered:
     buffer.colors.copyTo buffer.colorSsbo
     buffer.fontTarget.model.reuploadSsbo()
+  buffer.frameBuffer.clearColor = buffer.properties.background
+
 
 proc render*(buffer: Buffer) =
+  var old: (Glint, Glint, GlSizeI, GlSizeI)
+  if buffer.useFrameBuffer:
+    glGetIntegerv(GlViewPort, old[0].addr)
+    glViewport(0, 0, buffer.pixelWidth, buffer.pixelHeight)
+    buffer.frameBuffer.clear()
+    buffer.frameBuffer.bindBuffer()
   buffer.colorSsbo.bindBuffer(1)
   buffer.atlas.ssbo.bindBuffer(2)
   with buffer.shader:
     glEnable(GlBlend)
-    buffer.shader.setUniform("fontTex", buffer.atlas.texture)
     glBlendFunc(GlOne, GlOneMinusSrcAlpha)
+
+    buffer.shader.setUniform("fontTex", buffer.atlas.texture)
     buffer.fontTarget.model.render()
     glDisable(GlBlend)
+  if buffer.useFrameBuffer:
+    glViewport(old[0], old[1], old[2], old[3])
+    unbindFrameBuffer()
 
 proc clearLine*(buff: var Buffer, lineNum: int) =
   ## Writes over `start`

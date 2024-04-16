@@ -93,8 +93,8 @@ proc unjam(ship: var Ship, name: string) =
 
 
 import screenrenderer
-import pkg/truss3D, pkg/truss3D/[inputs]
-import pkg/vmath
+import pkg/truss3D/[inputs, models]
+import pkg/[vmath, pixie, truss3D]
 
 var
   buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: parseHtmlColor("White")))
@@ -119,7 +119,6 @@ proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
     for child in node:
       buffer.printTree(child, props)
   else:
-    echo "put"
     buffer.put(node.text, props)
   props = oldProp
 
@@ -137,12 +136,28 @@ proc displayEvent(buffer: var Buffer, eventPath: string) =
   buffer.printTree(xml[0], props)
 
 
+var
+  screenModel, coverModel: Model
+  coverTex: Texture
+  screenShader, coverShader: Shader
+
 
 proc init =
-  buffer.initResources(fontPath)
+  buffer.initResources(fontPath, false)
   buffer.displayEvent("event.html")
   startTextInput(default(inputs.Rect), "")
   buffer.put(">")
+
+  screenModel = loadModel("consolescreen.glb")
+  coverModel = loadModel("console.glb")
+  coverTex = genTexture()
+
+
+  readImage("console.png").copyTo coverTex
+
+  coverShader = loadShader(ShaderPath"vert.glsl", ShaderPath"frag.glsl")
+  screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
+
 
 proc handleTextChange(buff: var Buffer, input: string): bool =
   result = input.startsWith "text "
@@ -174,7 +189,9 @@ proc update(dt: float32) =
       setInputText("")
     if KeyCodeReturn.isDownRepeating():
       buffer.put "\n"
-      if not handleTextChange(buffer, input):
+      if input == "toggle3D":
+        buffer.toggleFrameBuffer()
+      elif not handleTextChange(buffer, input):
         buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
       input = ""
       buffer.put(">")
@@ -192,5 +209,20 @@ proc update(dt: float32) =
   buffer.upload(dt)
 
 proc draw =
+  var
+    projMatrix = perspective(60f, screenSize().x / screenSize().y, 0.1, 50)
+    viewMatrix = (vec3(0, 0, -1).toAngles(vec3(0)).fromAngles())
+
   buffer.render()
+  if buffer.usingFrameBuffer:
+    glEnable(GlDepthTest)
+    with coverShader:
+      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1.3))))
+      render(coverModel)
+
+    with screenShader:
+      screenShader.setUniform("tex", buffer.getFrameBufferTexture())
+      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1.3))))
+      render(screenModel)
+
 initTruss("Something", ivec2(buffer.pixelWidth, buffer.pixelHeight), init, update, draw, vsync = true)
