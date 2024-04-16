@@ -97,13 +97,50 @@ import pkg/truss3D, pkg/truss3D/[inputs]
 import pkg/vmath
 
 var
-  buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: colWhite))
+  buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   fontPath = "PublicPixel.ttf"
   input = ""
+
+const red = parseHtmlColor("Red")
+
+
+import std/[xmltree, htmlparser, strutils]
+
+proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
+  let oldProp = props
+  if node.kind == xnElement:
+    for name, field in props.fieldPairs:
+      let val = node.attr(name.toLowerAscii())
+      if val != "":
+        when field is SomeFloat:
+          field = parseFloat(val)
+        elif field is Color:
+          field = parseHtmlColor(val)
+    for child in node:
+      buffer.printTree(child, props)
+  else:
+    echo "put"
+    buffer.put(node.text, props)
+  props = oldProp
+
+
+proc displayEvent(buffer: var Buffer, eventPath: string) =
+  let xml = readFile(eventPath).parseHtml()
+  var props = buffer.properties
+  for name, field in props.fieldPairs:
+    let val = xml[0].attr(name.toLowerAscii())
+    if val != "":
+      when field is SomeFloat:
+        field = parseFloat(val)
+      elif field is Color:
+        field = parseHtmlColor(val)
+  buffer.printTree(xml[0], props)
+
 
 
 proc init =
   buffer.initResources(fontPath)
+  buffer.displayEvent("event.html")
   startTextInput(default(inputs.Rect), "")
   buffer.put(">")
 
@@ -119,16 +156,14 @@ proc handleTextChange(buff: var Buffer, input: string): bool =
           when field is SomeFloat:
             field = parseFloat(val)
           elif field is Color:
-            field = parseColor(val)
+            field = parseHtmlColor(val)
           buffer.put ($buffer.properties).replace(",", ",\n") & "\n"
         except CatchableError as e:
-          buffer.put(e.msg & "\n", GlyphProperties(foreground: colRed))
+          buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
     if not foundName:
-      buffer.put("No property named `$#`\n" % toSetField, GlyphProperties(foreground: colRed))
+      buffer.put("No property named `$#`\n" % toSetField, GlyphProperties(foreground: red))
   elif result:
-    buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: colRed))
-
-
+    buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: red))
 
 proc update(dt: float32) =
   if isTextInputActive():
@@ -140,7 +175,7 @@ proc update(dt: float32) =
     if KeyCodeReturn.isDownRepeating():
       buffer.put "\n"
       if not handleTextChange(buffer, input):
-        buffer.put("Incorrect command\n", GlyphProperties(foreground: colRed))
+        buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
       input = ""
       buffer.put(">")
     if KeyCodeBackspace.isDownRepeating() and input.len > 0:
