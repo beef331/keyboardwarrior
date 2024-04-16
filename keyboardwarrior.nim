@@ -66,7 +66,7 @@ var
 var validNames {.compileTime.}: seq[string]
 proc handleTextChange(buff: var Buffer, input: string) =
   var toSetField, val: string
-  if input.scanf("$+ $+", toSetField, val):
+  if input.scanf("$s$w$s$w", toSetField, val):
     var foundName = false
     for name, field in buff.properties.fieldPairs:
       static: validNames.add name
@@ -119,7 +119,7 @@ proc dispatchCommand(buffer: var Buffer, input: string) =
           input.high
       command = insStr input[0..ind]
     if command in commands:
-      commands[command](buffer, input[min(ind + 2, input.high) .. input.high])
+      commands[command](buffer, input[ind + 1 .. input.high])
     else:
       buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
 
