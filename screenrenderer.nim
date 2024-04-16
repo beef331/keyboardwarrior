@@ -134,13 +134,13 @@ proc upload*(buffer: var Buffer, dt: float32) =
         rendered = true
         buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: uint32 entry.id, matrix:  translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
       if glyph.rune == Rune('\n'):
-        y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
-        x = -1f
         break
       elif glyph.rune.isWhiteSpace:
         x += buffer.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
       else:
         x += size.x
+    y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
+    x = -1f
 
   if rendered:
     buffer.colors.copyTo buffer.colorSsbo
@@ -184,6 +184,11 @@ proc clearTo*(buff: var Buffer, line: int) =
 
 proc getPosition*(buff: var Buffer): (int, int) =
   (buff.lines[^1].len - 1, buff.lines.high)
+
+proc newLine*(buff: var Buffer) =
+  buff.lines.add Line()
+  if buff.lines.high - buff.cameraPos > buff.lineHeight:
+    buff.cameraPos = buff.lines.high - buff.lineHeight
 
 proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
   if buff.lines.len == 0:

@@ -156,7 +156,7 @@ proc update(dt: float32) =
         buffer.clearLine()
         buffer.put(">" & input)
       if KeyCodeReturn.isDownRepeating():
-        buffer.put "\n"
+        buffer.newLine()
         dispatchCommand(buffer, input)
         input = ""
         buffer.put(">")
