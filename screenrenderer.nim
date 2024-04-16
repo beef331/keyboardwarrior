@@ -48,7 +48,7 @@ type
     pixelWidth*: 0..1024
     lineHeight: int
     lineWidth: int
-    cameraPos: int
+    cameraPos*: int
     atlas: FontAtlas
     shader: Shader
     fontTarget: UiRenderTarget
@@ -176,7 +176,18 @@ proc clearLine*(buff: var Buffer) =
   ## Writes over `start`
   buff.lines[^1].len = 0
 
+proc clearTo*(buff: var Buffer, line: int) =
+  for line in buff.lines.toOpenArray(line, buff.lines.high).mitems:
+    line.len = 0
+
+  buff.lines.setLen(line + 1)
+
+proc getPosition*(buff: var Buffer): (int, int) =
+  (buff.lines[^1].len - 1, buff.lines.high)
+
 proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
+  if buff.lines.len == 0:
+    buff.lines.add Line()
   for rune in s.runes:
     buff.lines[^1].glyphs[buff.lines[^1].len] = Glyph(rune: rune, properties: props)
     inc buff.lines[^1].len

@@ -1,4 +1,5 @@
-import std/[strutils, strscans, tables, xmltree, htmlparser, hashes]
+import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm]
+import std/private/asciitables
 import screenrenderer
 import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]
@@ -55,13 +56,15 @@ proc displayEvent(buffer: var Buffer, eventPath: string) =
 const red = parseHtmlColor("Red")
 
 var
-  buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: parseHtmlColor("White")))
+  buffer = Buffer(pixelWidth: 480, pixelHeight: 320, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   fontPath = "PublicPixel.ttf"
   input = ""
   commands = initTable[InsensitiveString, CommandHandler]()
   screenModel, coverModel: Model
   coverTex: Texture
   screenShader, coverShader: Shader
+  inDummyProgram: bool
+  dummyX, dummyY: int
 
 var validNames {.compileTime.}: seq[string]
 proc handleTextChange(buff: var Buffer, input: string) =
@@ -90,6 +93,10 @@ commands[insStr"toggle3d"] = proc(buffer: var Buffer, _: string) =
   buffer.toggleFrameBuffer()
 commands[insStr"text"] = handleTextChange
 commands[insStr"clear"] = proc(buffer: var Buffer, _: string) =
+  buffer.toBottom()
+commands[insStr"sensors"] = proc(buffer: var Buffer, _: string) =
+  inDummyProgram = true
+  (dummyX, dummyY) = buffer.getPosition()
   buffer.toBottom()
 
 
@@ -123,30 +130,64 @@ proc dispatchCommand(buffer: var Buffer, input: string) =
     else:
       buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
 
+var entries: seq[tuple[name: string, distance, speed: float32, faction: string]] = @[
+  ("Orion", 500, 10, "Alliance"),
+  ("Prometheus", 600, 40, "Incarnate"),
+  ("Sisyphus", 10000, 100.0, "Wanderers"),
+  ("Icarus", 13000, 95, "Wanderers")
+]
+
 proc update(dt: float32) =
-  if isTextInputActive():
-    if inputText().len > 0:
-      input.add inputText()
-      buffer.clearLine()
-      buffer.put(">" & input)
-      setInputText("")
-    if KeyCodeReturn.isDownRepeating():
-      buffer.put "\n"
-      dispatchCommand(buffer, input)
-      input = ""
-      buffer.put(">")
-    if KeyCodeBackspace.isDownRepeating() and input.len > 0:
-      input.setLen(input.high)
-      buffer.clearLine()
-      buffer.put(">" & input)
+  if not inDummyProgram:
+    if isTextInputActive():
+      if inputText().len > 0:
+        input.add inputText()
+        buffer.clearLine()
+        buffer.put(">" & input)
+      if KeyCodeReturn.isDownRepeating():
+        buffer.put "\n"
+        dispatchCommand(buffer, input)
+        input = ""
+        buffer.put(">")
+      if KeyCodeBackspace.isDownRepeating() and input.len > 0:
+        input.setLen(input.high)
+        buffer.clearLine()
+        buffer.put(">" & input)
 
-  if KeyCodeUp.isDownRepeating():
-    buffer.scrollUp()
+    if KeyCodeUp.isDownRepeating():
+      buffer.scrollUp()
 
-  if KeyCodeDown.isDownRepeating():
-    buffer.scrollDown()
+    if KeyCodeDown.isDownRepeating():
+      buffer.scrollDown()
+  else:
+    buffer.clearTo(dummyY)
+    buffer.cameraPos = dummyY
+
+    var message = ""
+
+    for name, _ in default(typeof(entries[0])).fieldPairs:
+      message.add name.capitalizeAscii() & "\t"
+
+    message.add "\n"
+    entries.sort(proc(a, b: typeof(entries[0])): int = cmp(a.distance, b.distance))
+    for entry in entries.mitems:
+      entry.distance -= entry.speed * dt
+      for field in entry.fields:
+        message.add:
+          when field is float32:
+            field.formatFloat(precision = 4)
+          else:
+            $field
+        message.add "\t"
+      message.add "\n"
+
+    buffer.put message.alignTable()
+    if KeyCodeEscape.isDown:
+      inDummyProgram = false
+      buffer.put ">"
 
   buffer.upload(dt)
+  setInputText("")
 
 proc draw =
   var
@@ -157,12 +198,12 @@ proc draw =
   if buffer.usingFrameBuffer:
     glEnable(GlDepthTest)
     with coverShader:
-      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1.3))))
+      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1))))
       render(coverModel)
 
     with screenShader:
       screenShader.setUniform("tex", buffer.getFrameBufferTexture())
-      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1.3))))
+      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.75, -1))))
       render(screenModel)
 
 initTruss("Something", ivec2(buffer.pixelWidth, buffer.pixelHeight), init, update, draw, vsync = true)
