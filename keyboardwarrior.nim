@@ -63,11 +63,13 @@ var
   coverTex: Texture
   screenShader, coverShader: Shader
 
+var validNames {.compileTime.}: seq[string]
 proc handleTextChange(buff: var Buffer, input: string) =
   var toSetField, val: string
   if input.scanf("$+ $+", toSetField, val):
     var foundName = false
     for name, field in buff.properties.fieldPairs:
+      static: validNames.add name
       if name.cmpIgnoreStyle(toSetField) == 0:
         foundName = true
         try:
@@ -79,7 +81,7 @@ proc handleTextChange(buff: var Buffer, input: string) =
         except CatchableError as e:
           buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
     if not foundName:
-      buffer.put("No property named `$#`\n" % toSetField, GlyphProperties(foreground: red))
+      buffer.put("No property named `$#`\nValid property names are:\n$#\n" % [toSetField, static(validNames).join("\n")], GlyphProperties(foreground: red))
   else:
     buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: red))
 
@@ -120,7 +122,6 @@ proc dispatchCommand(buffer: var Buffer, input: string) =
       commands[command](buffer, input[min(ind + 2, input.high) .. input.high])
     else:
       buffer.put("Incorrect command\n", GlyphProperties(foreground: red))
-
 
 proc update(dt: float32) =
   if isTextInputActive():
