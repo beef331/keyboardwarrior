@@ -1,6 +1,6 @@
 import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm]
 import std/private/asciitables
-import screenrenderer
+import screenrenderer, texttables
 import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]
 
@@ -180,26 +180,32 @@ proc update(dt: float32) =
   else:
     buffer.clearTo(dummyY)
     buffer.cameraPos = dummyY
-
-    var message = ""
-
-    for name, _ in default(typeof(entries[0])).fieldPairs:
-      message.add name.capitalizeAscii() & "\t"
-
-    message.add "\n"
-    entries.sort(proc(a, b: typeof(entries[0])): int = cmp(a.distance, b.distance))
+    var
+      props: seq[GlyphProperties]
+      nameProp = GlyphProperties(foreground: parseHtmlColor"Orange")
+      yellow = GlyphProperties(foreground: parseHtmlColor"Yellow")
+      red = GlyphProperties(foreground: parseHtmlColor"red")
     for entry in entries.mitems:
       entry.distance -= entry.speed * dt
-      for field in entry.fields:
-        message.add:
-          when field is float32:
-            field.formatFloat(precision = 4)
-          else:
-            $field
-        message.add "\t"
-      message.add "\n"
+      if entry.faction == "Alliance":
+        props.add red
+      else:
+        props.add nameProp
+      props.add buffer.properties
+      props.add buffer.properties
+      if entry.faction == "Alliance":
+        props.add red
+      else:
+        props.add yellow
 
-    buffer.put message.alignTable()
+
+
+
+
+
+    entries = entries.sortedByIt(it.distance)
+    buffer.printTable(entries, entryProperties = props, formatProperties = TableFormatProps(floatSigDigs: 4))
+
     if KeyCodeEscape.isDown:
       inDummyProgram = false
       buffer.put ">"
