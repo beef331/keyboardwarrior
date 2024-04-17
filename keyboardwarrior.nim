@@ -1,6 +1,6 @@
-import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm]
+import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm, random]
 import std/private/asciitables
-import screenrenderer, texttables
+import screenrenderer, texttables, hardwarehacksuite
 import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]
 
@@ -58,6 +58,11 @@ proc displayEvent(buffer: var Buffer, eventPath: string) =
 
 const red = parseHtmlColor("Red")
 
+type Program = enum
+  Nothing
+  Sensors
+  Hacking
+
 var
   buffer = Buffer(pixelWidth: 480, pixelHeight: 320, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   fontPath = "PublicPixel.ttf"
@@ -66,8 +71,8 @@ var
   screenModel, coverModel: Model
   coverTex: Texture
   screenShader, coverShader: Shader
-  inDummyProgram: bool
-  dummyX, dummyY: int
+  currentProgram = Program.Nothing
+  programX, programY: int
 
 var validNames {.compileTime.}: seq[string]
 proc handleTextChange(buff: var Buffer, input: string) =
@@ -91,6 +96,13 @@ proc handleTextChange(buff: var Buffer, input: string) =
   else:
     buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: red))
 
+proc enterProgram(program: Program) =
+  currentProgram = program
+  (programX, programY) = buffer.getPosition()
+  buffer.toBottom()
+
+
+var hack: HardwareHack
 
 commands[insStr"toggle3d"] = proc(buffer: var Buffer, _: string) =
   buffer.toggleFrameBuffer()
@@ -98,9 +110,8 @@ commands[insStr"text"] = handleTextChange
 commands[insStr"clear"] = proc(buffer: var Buffer, _: string) =
   buffer.toBottom()
 commands[insStr"sensors"] = proc(buffer: var Buffer, _: string) =
-  inDummyProgram = true
-  (dummyX, dummyY) = buffer.getPosition()
-  buffer.toBottom()
+  enterProgram(Sensors)
+
 
 commands[insStr"event"] = proc(buffer: var Buffer, str: string) =
   var
@@ -117,6 +128,10 @@ commands[insStr"event"] = proc(buffer: var Buffer, str: string) =
   if errored:
     buffer.put("Failed to display event\n", GlyphProperties(foreground: red))
 
+commands[insStr"hhs"] = proc(buffer: var Buffer, str: string) =
+  if not hack.isInit:
+    hack = HardwareHack.init(10, rand(0..10), "Orion", "hunter2", 2)
+  enterProgram(Hacking)
 
 
 proc init =
@@ -155,8 +170,35 @@ var entries: seq[tuple[name: string, distance, speed: float32, faction: string]]
   ("Icarus", 13000, 95, "Wanderers")
 ]
 
+proc sensorUpdate(dt: float32) =
+  var
+    props: seq[GlyphProperties]
+    nameProp = GlyphProperties(foreground: parseHtmlColor"Orange")
+    yellow = GlyphProperties(foreground: parseHtmlColor"Yellow")
+    red = GlyphProperties(foreground: parseHtmlColor"red")
+  for entry in entries.mitems:
+    entry.distance -= entry.speed * dt
+    if entry.faction == "Alliance":
+      props.add red
+    else:
+      props.add nameProp
+    props.add buffer.properties
+    props.add buffer.properties
+    if entry.faction == "Alliance":
+      props.add red
+    else:
+      props.add yellow
+
+  entries = entries.sortedByIt(it.distance)
+  buffer.printTable(entries, entryProperties = props, formatProperties = TableFormatProps(floatSigDigs: 4))
+
+
 proc update(dt: float32) =
-  if not inDummyProgram:
+  if hack.isInit:
+    hack.update(dt, currentProgram == Hacking)
+
+  case currentProgram
+  of Nothing:
     if isTextInputActive():
       if inputText().len > 0:
         input.add inputText()
@@ -178,37 +220,17 @@ proc update(dt: float32) =
     if KeyCodeDown.isDownRepeating():
       buffer.scrollDown()
   else:
-    buffer.clearTo(dummyY)
-    buffer.cameraPos = dummyY
-    var
-      props: seq[GlyphProperties]
-      nameProp = GlyphProperties(foreground: parseHtmlColor"Orange")
-      yellow = GlyphProperties(foreground: parseHtmlColor"Yellow")
-      red = GlyphProperties(foreground: parseHtmlColor"red")
-    for entry in entries.mitems:
-      entry.distance -= entry.speed * dt
-      if entry.faction == "Alliance":
-        props.add red
-      else:
-        props.add nameProp
-      props.add buffer.properties
-      props.add buffer.properties
-      if entry.faction == "Alliance":
-        props.add red
-      else:
-        props.add yellow
+    buffer.clearTo(programY)
+    buffer.cameraPos = programY
+    case range[succ(Nothing)..Program.high](currentProgram)
+    of Sensors:
+      sensorUpdate(dt)
+    of Hacking:
+      buffer.put hack
 
-
-
-
-
-
-    entries = entries.sortedByIt(it.distance)
-    buffer.printTable(entries, entryProperties = props, formatProperties = TableFormatProps(floatSigDigs: 4))
-
-    if KeyCodeEscape.isDown:
-      inDummyProgram = false
-      buffer.put ">"
+  if currentProgram != Nothing and KeyCodeEscape.isDown:
+    currentProgram = Nothing
+    buffer.put ">"
 
   buffer.upload(dt)
   setInputText("")

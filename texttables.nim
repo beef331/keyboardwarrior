@@ -1,6 +1,8 @@
 import std/private/asciitables
-import std/[parseutils, strutils, options]
+import std/[parseutils, strutils, options, macros]
 import screenrenderer
+
+template tableName*(s: string){.pragma.}
 
 proc paramCount(T: typedesc[object or tuple]): int =
   for _ in default(T).fields:
@@ -28,9 +30,15 @@ iterator tableEntries[T](
     largest = newSeq[int](T.paramCount)
 
   var fieldInd = 0
-  for name, _ in default(T).fieldPairs:
-    largest[fieldInd] = name.len
-    strings.add (name, headerProperties)
+  for name, field in default(T).fieldPairs:
+    let nameStr =
+      when field.hasCustomPragma(tableName):
+        field.getCustomPragmaVal(tableName)
+      else:
+        name
+
+    largest[fieldInd] = nameStr.len
+    strings.add (nameStr, headerProperties)
     inc fieldInd
 
   var entryInd = 0
