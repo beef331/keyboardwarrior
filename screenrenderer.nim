@@ -44,10 +44,10 @@ iterator mitems(line: var Line): var Glyph =
 type
   Buffer* = object
     lines: seq[Line]
-    pixelHeight*: 0..1024
-    pixelWidth*: 0..1024
-    lineHeight: int
-    lineWidth: int
+    pixelHeight: int
+    pixelWidth: int
+    lineHeight*: int
+    lineWidth*: int
     cameraPos*: int
     atlas: FontAtlas
     shader: Shader
@@ -61,6 +61,9 @@ type
     useFrameBuffer: bool
     frameBufferSetup: bool
     frameBuffer: FrameBuffer
+
+proc pixelHeight*(buffer: Buffer): int = buffer.pixelHeight
+proc pixelWidth*(buffer: Buffer): int = buffer.pixelWidth
 
 const
   guiVert = ShaderPath"text.vert.glsl"
@@ -79,8 +82,8 @@ proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false
   buffer.atlas.font.size = 18
 
   let charEntry = buffer.atlas.runeEntry(Rune('+'))
-  buffer.lineWidth = buffer.pixelWidth div charEntry.rect.w.int * 2 - 1
-  buffer.lineHeight = buffer.pixelHeight div charEntry.rect.h.int * 2 - 1
+  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int
+  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int
   buffer.lines.add Line()
   buffer.noise = newOpenSimplex()
   if useFrameBuffer:
@@ -89,6 +92,16 @@ proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false
     buffer.useFrameBuffer = true
     buffer.frameBufferSetup = true
 
+proc setFontSize*(buffer: var Buffer, size: int) =
+  buffer.atlas.setFontSize(size.float32)
+  let charEntry = buffer.atlas.runeEntry(Rune('+'))
+  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int
+  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int
+  if buffer.useFrameBuffer:
+    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
+    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
+    buffer.useFrameBuffer = true
+    buffer.frameBufferSetup = true
 
 proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   if color notin buffer.colorInd:
@@ -98,12 +111,13 @@ proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   else:
     buffer.colorInd[color]
 
-proc getFrameBufferTexture*(buffer: Buffer): Texture = buffer.frameBuffer.colourTexture
+proc getFrameBufferTexture*(buffer: Buffer): lent Texture = buffer.frameBuffer.colourTexture
 
 proc toggleFrameBuffer*(buffer: var Buffer) =
   buffer.useFrameBuffer = not buffer.useFrameBuffer
   if not buffer.framebufferSetup: # TODO: framebuffer.id != 0
     buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
+    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
     buffer.frameBufferSetup = true
 
 proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer

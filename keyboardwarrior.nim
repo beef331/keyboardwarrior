@@ -64,7 +64,7 @@ type Program = enum
   Hacking
 
 var
-  buffer = Buffer(pixelWidth: 480, pixelHeight: 320, properties: GlyphProperties(foreground: parseHtmlColor("White")))
+  buffer = Buffer(lineWidth: 40, lineHeight: 30, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   fontPath = "PublicPixel.ttf"
   input = ""
   commands = initTable[InsensitiveString, CommandHandler]()
@@ -79,20 +79,32 @@ proc handleTextChange(buff: var Buffer, input: string) =
   var toSetField, val: string
   if input.scanf("$s$w$s$+", toSetField, val):
     var foundName = false
-    for name, field in buff.properties.fieldPairs:
-      static: validNames.add name
-      if name.cmpIgnoreStyle(toSetField) == 0:
-        foundName = true
-        try:
-          when field is SomeFloat:
-            field = parseFloat(val)
-          elif field is Color:
-            field = parseHtmlColor(val)
-          buffer.put ($buffer.properties).replace(",", ",\n") & "\n"
-        except CatchableError as e:
-          buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
+    case toSetField
+    of "size":
+      static: validNames.add "size"
+      foundName = true
+      try:
+        let newSize = parseInt(val)
+        if newSize notin 5..30:
+          raise (ref ValueError)(msg: "Expected value in 5..50, but got: " & $newSize)
+        buff.setFontSize(newSize)
+      except CatchableError as e:
+        buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
+    else:
+      for name, field in buff.properties.fieldPairs:
+        static: validNames.add name
+        if name.cmpIgnoreStyle(toSetField) == 0:
+          foundName = true
+          try:
+            when field is SomeFloat:
+              field = parseFloat(val)
+            elif field is Color:
+              field = parseHtmlColor(val)
+            buffer.put ($buffer.properties).replace(",", ",\n") & "\n"
+          except CatchableError as e:
+            buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
     if not foundName:
-      buffer.put("No property named `$#`\nValid property names are:\n$#\n" % [toSetField, static(validNames).join("\n")], GlyphProperties(foreground: red))
+      buffer.put("No property named `$#`\nValid property names are:\n$#\n" % [toSetField, static(validNames.join("\n"))], GlyphProperties(foreground: red))
   else:
     buffer.put("Incorrect command expected `text propertyName value`\n", GlyphProperties(foreground: red))
 
@@ -248,6 +260,7 @@ proc draw =
   if buffer.usingFrameBuffer:
     glEnable(GlDepthTest)
     with coverShader:
+      #coverShader.setUniform("tex", coverTex)
       coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.6, -1))))
       render(coverModel)
 
@@ -256,4 +269,4 @@ proc draw =
       screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.6, -1))))
       render(screenModel)
 
-initTruss("Something", ivec2(buffer.pixelWidth, buffer.pixelHeight), init, update, draw, vsync = true)
+initTruss("Something", ivec2(1280, 720), init, update, draw, vsync = true)
