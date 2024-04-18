@@ -4,6 +4,8 @@ import screenrenderer, texttables, hardwarehacksuite
 import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]
 
+const maxTextSize = 50
+
 type
   InsensitiveString = distinct string
   CommandHandler = proc(buffer: var Buffer, input: string) {.nimcall.}
@@ -85,11 +87,21 @@ proc handleTextChange(buff: var Buffer, input: string) =
       foundName = true
       try:
         let newSize = parseInt(val)
-        if newSize notin 5..30:
-          raise (ref ValueError)(msg: "Expected value in 5..50, but got: " & $newSize)
+        if newSize notin 5..maxTextSize:
+          raise (ref ValueError)(msg: "Expected value in $#, but got: $#" % [$(5..maxTextSize), $newSize])
         buff.setFontSize(newSize)
       except CatchableError as e:
         buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
+    of "font":
+      static: validNames.add "font"
+      foundName = true
+      try:
+        let size = buff.fontSize
+        buff.setFont(readFont(val & ".ttf"))
+        buff.setFontSize(size)
+      except CatchableError as e:
+        buffer.put(e.msg & "\n", GlyphProperties(foreground: red))
+
     else:
       for name, field in buff.properties.fieldPairs:
         static: validNames.add name

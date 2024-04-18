@@ -69,6 +69,19 @@ const
   guiVert = ShaderPath"text.vert.glsl"
   guiFrag = ShaderPath"text.frag.glsl"
 
+proc recalculateBuffer*(buffer: var Buffer) =
+  let charEntry = buffer.atlas.runeEntry(Rune('+'))
+  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int
+  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int
+  if buffer.lines.len == 0:
+    buffer.lines.add Line()
+  if buffer.useFrameBuffer:
+    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
+    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
+    buffer.useFrameBuffer = true
+    buffer.frameBufferSetup = true
+
+
 proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false) =
   buffer.atlas = FontAtlas.init(1024f, 1024f, 3f, readFont(fontPath))
   buffer.shader = loadShader(guiVert, guiFrag)
@@ -80,28 +93,19 @@ proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false
   buffer.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
   buffer.colorSsbo = genSsbo[seq[Color]](1)
   buffer.atlas.font.size = 18
-
-  let charEntry = buffer.atlas.runeEntry(Rune('+'))
-  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int
-  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int
-  buffer.lines.add Line()
   buffer.noise = newOpenSimplex()
-  if useFrameBuffer:
-    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
-    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
-    buffer.useFrameBuffer = true
-    buffer.frameBufferSetup = true
+  buffer.useFrameBuffer = useFrameBuffer
+  buffer.recalculateBuffer()
+
+proc fontSize*(buffer: Buffer): int =  int buffer.atlas.font.size
 
 proc setFontSize*(buffer: var Buffer, size: int) =
   buffer.atlas.setFontSize(size.float32)
-  let charEntry = buffer.atlas.runeEntry(Rune('+'))
-  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int
-  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int
-  if buffer.useFrameBuffer:
-    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
-    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
-    buffer.useFrameBuffer = true
-    buffer.frameBufferSetup = true
+  buffer.recalculateBuffer()
+
+proc setFont*(buffer: var Buffer, font: Font) =
+  buffer.atlas.setFont(font)
+  buffer.recalculateBuffer()
 
 proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   if color notin buffer.colorInd:
