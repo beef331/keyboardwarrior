@@ -5,10 +5,10 @@ import std/[algorithm, strutils, math]
 
 type
   HackGuess = object
-    id: int
-    password: string
+    id {.tableName: "Id".}: int
+    password {.tableName: "Password".}: string
     timeToDeny {.tableName:"Time To Deny".}: int
-    guessed: bool
+    guessed {.tableName: "Guessed".}: bool
 
   HardwareHack* = object
     target: string

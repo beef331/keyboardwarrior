@@ -76,7 +76,7 @@ proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false
 
   buffer.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
   buffer.colorSsbo = genSsbo[seq[Color]](1)
-  buffer.atlas.font.size = 15
+  buffer.atlas.font.size = 24
 
   let charEntry = buffer.atlas.runeEntry(Rune('+'))
   buffer.lineWidth = buffer.pixelWidth div charEntry.rect.w.int * 2 - 1
