@@ -130,7 +130,11 @@ commands[insStr"event"] = proc(buffer: var Buffer, str: string) =
 
 commands[insStr"hhs"] = proc(buffer: var Buffer, str: string) =
   if not hack.isInit:
-    hack = HardwareHack.init(10, rand(0..10), "Orion", "hunter2", 2)
+    randomize()
+    var password = newString(5)
+    for ch in password.mitems:
+      ch = sample(Digits + Letters)
+    hack = HardwareHack.init(20, rand(0..10), "Orion", password, 3)
   enterProgram(Hacking)
 
 
