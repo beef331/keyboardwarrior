@@ -1,14 +1,18 @@
 import std/private/asciitables
-import std/[parseutils, strutils, options, macros]
+import std/[parseutils, strutils, options, macros, sequtils]
 import screenrenderer
-
-template tableName*(s: string){.pragma.}
 
 proc paramCount(T: typedesc[object or tuple]): int =
   for _ in default(T).fields:
     inc result
 
 proc tableFormat*(val: auto): string = $val
+
+proc alignRight*(s: string, count: Natural, padding = ' '): string =
+  if s.len < count:
+    result = padding.repeat(count - s.len)
+  result.add s
+
 
 type
   TableKind* = enum
@@ -18,6 +22,10 @@ type
   TableFormatProps* = object
     intSigDigs*: int
     floatSigDigs*: int
+  AlignFunction* = typeof(alignRight)
+
+template tableName*(s: string){.pragma.}
+template tableAlign*(_: AlignFunction){.pragma.}
 
 iterator tableEntries[T](
   values: openArray[T],
@@ -28,6 +36,7 @@ iterator tableEntries[T](
   var
     strings = newSeqOfCap[(string, GlyphProperties)](values.len * T.paramCount)
     largest = newSeq[int](T.paramCount)
+    alignFunctions = newSeqWith(T.paramCount, alignRight)
 
   var fieldInd = 0
   for name, field in default(T).fieldPairs:
@@ -36,6 +45,9 @@ iterator tableEntries[T](
         field.getCustomPragmaVal(tableName)
       else:
         name
+
+    when field.hasCustomPragma(tableAlign):
+      alignFunctions[fieldInd] = field.getCustomPragmaVal(tableAlign)
 
     largest[fieldInd] = nameStr.len
     strings.add (nameStr, headerProperties)
@@ -70,7 +82,8 @@ iterator tableEntries[T](
       inc fieldInd
 
   for i, entry in strings:
-    yield (entry[0].alignLeft(largest[i mod T.paramCount]), entry[1], Entry)
+    let alignInd = i mod T.paramCount
+    yield (alignFunctions[alignInd](entry[0], largest[alignInd]), entry[1], Entry)
     if (i + 1) mod T.paramCount == 0:
       yield ("", defaultProperties, NewLine)
     else:
