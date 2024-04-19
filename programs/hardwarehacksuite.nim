@@ -133,8 +133,8 @@ proc hhs(gamestate: var GameState, input: string) =
       ch = sample(Digits + Letters)
     gameState.enterProgram(HardwareHack.init(20, rand(0..10), "Orion", password, 3).toTrait(Program))
 
-const hhsCommand* = Command(
-  name: "hhs",
-  help: "This starts a hack on the target.",
-  handler: hhs
-  )
+command(
+  "hhs",
+  "This starts a hack on the target.",
+  hhs
+)

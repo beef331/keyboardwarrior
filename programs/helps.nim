@@ -6,8 +6,8 @@ proc helpHandler(gameState: var GameState, input: string) =
     gameState.buffer.newLine()
 
 
-const helpCommand* = Command(
-  name: "help",
-  help: "This prints this message",
-  handler: helpHandler
+command(
+  "help",
+  "This prints this message",
+  helpHandler
 )

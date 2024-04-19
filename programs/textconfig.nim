@@ -46,8 +46,8 @@ proc handleTextChange(gamestate: var GameState, input: string) =
   else:
     gamestate.writeError("Incorrect command expected `text propertyName value`\n")
 
-const textConfigCommand* = Command(
-  name: "text",
-  help: "This command allows you to change the properties of the terminal text",
-  handler: handleTextChange
-  )
+command(
+  "text",
+  "This command allows you to change the properties of the terminal text",
+  handleTextChange
+)

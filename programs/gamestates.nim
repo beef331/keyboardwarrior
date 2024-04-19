@@ -4,6 +4,7 @@ import std/[tables, strutils, hashes]
 import pkg/truss3D/inputs
 
 export screenrenderer, chroma, pixie
+
 const maxTextSize* = 50
 
 type InsensitiveString* = distinct string
@@ -29,11 +30,12 @@ type
     update: proc(_: var Atom, gameState: var GameState, dt: float32, active: bool) {.nimcall.},
     name: proc(_: Atom): string {.nimcall.}
   ]
+  CommandHandler* = proc(gamestate: var Gamestate, input: string)
 
   Command* = object
     name*: string
     help*: string
-    handler*: proc(gamestate: var Gamestate, input: string)
+    handler*: CommandHandler
 
   GameState* = object
     buffer*: Buffer
@@ -65,7 +67,10 @@ proc enterProgram*(gameState: var GameState, program: sink string) =
 
 proc hasProgram*(gameState: var GameState, name: string): bool = name in gameState.programs
 
-import textconfig, hardwarehacksuite, eventprinter, sensors, helps
+import programutils
+export programutils
+
+importAllCommands()
 
 proc add*(gameState: var GameState, command: Command) =
   gameState.handlers[InsensitiveString(command.name)] = command
@@ -83,11 +88,8 @@ proc init*(_: typedesc[GameState]): GameState =
     handler: proc(gameState: var GameState, _: string) = gamestate.buffer.toBottom()
   )
 
-  result.add textConfigCommand
-  result.add hhsCommand
-  result.add eventCommand
-  result.add sensorCommand
-  result.add helpCommand
+  for command in programutils.commands():
+    result.add command
 
   result.buffer = Buffer(lineWidth: 80, lineHeight: 30, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   result.buffer.put(">")

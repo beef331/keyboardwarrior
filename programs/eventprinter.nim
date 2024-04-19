@@ -48,8 +48,8 @@ proc eventHandler(gameState: var GameState, str: string) =
     gameState.writeError("Failed to display event\n")
 
 
-const eventCommand* = Command(
-  name: "event",
-  help: "A debug command that shows events",
-  handler: eventHandler
+command(
+  "event",
+  "A debug command that shows events",
+  eventHandler
 )

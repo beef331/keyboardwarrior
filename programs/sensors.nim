@@ -44,9 +44,8 @@ proc sensorHandler(gameState: var GameState, input: string) =
   else:
     gameState.enterProgram(Sensor().toTrait(Program))
 
-
-const sensorCommand* = Command(
-  name: "sensors",
-  help: "Prints out information of nearby ships and points of interest",
-  handler: sensorHandler
-  )
+command(
+  "sensors",
+  "Prints out information of nearby ships and points of interest",
+  sensorHandler
+)
