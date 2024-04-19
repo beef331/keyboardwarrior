@@ -17,9 +17,7 @@ proc init =
   coverModel = loadModel("console.glb")
   coverTex = genTexture()
 
-
   readImage("console.png").copyTo coverTex
-
   coverShader = loadShader(ShaderPath"vert.glsl", ShaderPath"frag.glsl")
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
 

@@ -51,7 +51,7 @@ iterator commands*(gameState: GameState): Command =
     yield command
 
 proc writeError*(gameState: var GameState, msg: string) =
-  gameState.buffer.put("Incorrect command\n", GlyphProperties(foreground: parseHtmlColor"red"))
+  gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
 
 proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
   (gameState.programX, gameState.programY) = gamestate.buffer.getPosition()
@@ -94,7 +94,7 @@ proc init*(_: typedesc[GameState]): GameState =
   result.buffer.initResources("PublicPixel.ttf")
 
 proc dispatchCommand(gameState: var GameState) =
-  let input = gameState.input
+  let input {.cursor.} = gameState.input
   if input.len > 0:
     let
       ind =
@@ -107,6 +107,8 @@ proc dispatchCommand(gameState: var GameState) =
       gamestate.handlers[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command\n")
+  gameState.input = ""
+
 
 proc update*(gameState: var GameState, dt: float) =
   for key, program in gamestate.programs:
@@ -122,7 +124,6 @@ proc update*(gameState: var GameState, dt: float) =
       if KeyCodeReturn.isDownRepeating():
         gameState.buffer.newLine()
         gameState.dispatchCommand()
-        gameState.input = ""
         gameState.buffer.put(">")
       if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
         gameState.input.setLen(gameState.input.high)
