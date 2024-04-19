@@ -1,7 +1,7 @@
-import screenrenderer, texttables
-import pkg/chroma
+import ../texttables
 import pkg/truss3D/inputs
 import std/[algorithm, strutils, math, random, sets]
+import gamestates
 
 type
   HackGuess = object
@@ -11,6 +11,7 @@ type
     guessed {.tableName: "Guessed".}: bool
 
   HardwareHack* = object
+    name: string
     target: string
     actualPassword: string
     currentGuessInd: int
@@ -30,7 +31,7 @@ proc closeness(guess: HackGuess): float32 =
   1f - (guess.timeToDeny - guess.password.len) / (guess.password.len * 2)
 
 proc init*(_: typedesc[HardwareHack], securityLevel, actualPassPos: int, target, password: string, hackSpeed = 1f): HardwareHack =
-  result = HardwareHack(target: target, actualPassword: password, currentGuessInd: -1, hackSpeed: hackSpeed)
+  result = HardwareHack(name: "hhs" & target, target: target, actualPassword: password, currentGuessInd: -1, hackSpeed: hackSpeed)
   var
     sortedPass = password
     added: HashSet[string]
@@ -50,7 +51,35 @@ proc currentGuess(hwHack: var HardwareHack): var HackGuess = hwHack.guesses[hwHa
 proc isHacking(hwHack: HardwareHack): bool =
   hwHack.currentGuessInd != -1 and not hwHack.currentGuess.guessed
 
-proc update*(hwHack: var HardwareHack, dt: float32, active: bool) =
+proc put*(buffer: var Buffer, hwHack: HardwareHack) =
+  var entryProps {.global.}: seq[GlyphProperties]
+  entryProps.setLen(0)
+  for guess in hwHack.guesses:
+    entryProps.add buffer.properties
+    entryProps.add:
+      if guess.guessed: # password, time, guessed
+        let mixedColor = GlyphProperties(foreground: mix(parseHtmlColor("red"), parseHtmlColor("lime"), guess.closeness))
+        [mixedColor, mixedColor, GlyphProperties(foreground: parseHtmlColor"lime")]
+      else:
+        [buffer.properties, buffer.properties, GlyphProperties(foreground: parseHtmlColor"red")]
+  buffer.printTable(hwHack.guesses, entryProperties = entryProps)
+  if hwHack.isHacking:
+    buffer.put "["
+    let progress = int (hwHack.hackTime / hwHack.timeToHack) * 10
+    buffer.put "=".repeat(progress)
+    buffer.put " ".repeat(10 - progress)
+    buffer.put "]"
+
+  if not hwHack.isHacking:
+    buffer.put "Id to guess: "
+    buffer.put hwHack.input
+    if hwHack.errorMsg.len > 0:
+      buffer.newLine()
+      buffer.put hwHack.errorMsg, GlyphProperties(foreground: parseHtmlColor("red"))
+
+  buffer.newLine()
+
+proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, active: bool) =
   if active and not hwHack.isHacking:
     if inputText().len > 0:
       hwHack.input.add inputText()
@@ -88,32 +117,24 @@ proc update*(hwHack: var HardwareHack, dt: float32, active: bool) =
       hwHack.currentGuess.guessed = true
       hwHack.currentGuess.timeToDeny = int(hwHack.timeToHack)
 
-proc put*(buffer: var Buffer, hwHack: HardwareHack) =
-  var entryProps {.global.}: seq[GlyphProperties]
-  entryProps.setLen(0)
-  for guess in hwHack.guesses:
-    entryProps.add buffer.properties
-    entryProps.add:
-      if guess.guessed: # password, time, guessed
-        let mixedColor = GlyphProperties(foreground: mix(parseHtmlColor("red"), parseHtmlColor("lime"), guess.closeness))
-        [mixedColor, mixedColor, GlyphProperties(foreground: parseHtmlColor"lime")]
-      else:
-        [buffer.properties, buffer.properties, GlyphProperties(foreground: parseHtmlColor"red")]
-  buffer.printTable(hwHack.guesses, entryProperties = entryProps)
-  if hwHack.isHacking:
-    buffer.put "["
-    let progress = int (hwHack.hackTime / hwHack.timeToHack) * 10
-    buffer.put "=".repeat(progress)
-    buffer.put " ".repeat(10 - progress)
-    buffer.put "]"
+  if active:
+    gameState.buffer.put(hwHack)
 
-  if not hwHack.isHacking:
-    buffer.put "Id to guess: "
-    buffer.put hwHack.input
-    if hwHack.errorMsg.len > 0:
-      buffer.newLine()
-      buffer.put hwHack.errorMsg, GlyphProperties(foreground: parseHtmlColor("red"))
+proc onExit*(hw: var HardwareHack, gameState: GameState) = discard
+proc name*(hw: HardwareHack): string = hw.name
 
-  buffer.newLine()
+proc hhs(gamestate: var GameState, input: string) =
+  if gameState.hasProgram("hhs"):
+    gameState.enterProgram("hhs")
+  else:
+    randomize()
+    var password = newString(5)
+    for ch in password.mitems:
+      ch = sample(Digits + Letters)
+    gameState.enterProgram(HardwareHack.init(20, rand(0..10), "Orion", password, 3).toTrait(Program))
 
-
+const hhsCommand* = Command(
+  name: "hhs",
+  help: "This starts a hack on the target.",
+  handler: hhs
+  )
