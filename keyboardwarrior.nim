@@ -126,7 +126,9 @@ proc enterProgram(program: Program) =
   buffer.toBottom()
 
 
-var hack: HardwareHack
+var
+  hack: HardwareHack
+  cameraPos: Vec3 = vec3(0.15, -0.6, -0.8)
 
 commands[insStr"toggle3d"] = proc(buffer: var Buffer, _: string) =
   buffer.toggleFrameBuffer()
@@ -162,10 +164,22 @@ commands[insStr"hhs"] = proc(buffer: var Buffer, str: string) =
   enterProgram(Hacking)
 
 
+commands[insStr"position"] = proc(buffer: var Buffer, str: string) =
+  var x,y,z: float
+  if str.len == 0:
+    buffer.put cameraPos.x.formatFloat(precision = 2) & " " & cameraPos.y.formatFloat(precision = 2) & " " & cameraPos.z.formatFloat(precision = 2)
+    buffer.newline()
+  elif str.scanf("$s$f$s$f$s$f", x, y, z):
+    cameraPos = vec3(x, y, z)
+
+  else:
+    buffer.put("Expected x y z\n", GlyphProperties(foreground: red))
+
 proc init =
   buffer.initResources(fontPath, false)
   startTextInput(default(inputs.Rect), "")
   buffer.put(">")
+  buffer.toggleFrameBuffer()
 
   screenModel = loadModel("consolescreen.glb")
   coverModel = loadModel("console.glb")
@@ -272,13 +286,13 @@ proc draw =
   if buffer.usingFrameBuffer:
     glEnable(GlDepthTest)
     with coverShader:
-      #coverShader.setUniform("tex", coverTex)
-      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.6, -1))))
+      coverShader.setUniform("tex", coverTex)
+      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(cameraPos))))
       render(coverModel)
 
     with screenShader:
       screenShader.setUniform("tex", buffer.getFrameBufferTexture())
-      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(0.3, -0.6, -1))))
+      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(cameraPos)))
       render(screenModel)
 
 initTruss("Something", ivec2(1280, 720), init, update, draw, vsync = true)
