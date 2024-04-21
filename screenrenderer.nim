@@ -247,7 +247,7 @@ proc toBottom*(buffer: var Buffer) =
 when isMainModule:
   const clear = color(0, 0, 0, 0)
   var
-    buffer = Buffer(pixelWidth: 320, pixelHeight: 240, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
+    buffer = Buffer(lineWidth: 40, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
     fontPath = "PublicPixel.ttf"
 
   proc init =
