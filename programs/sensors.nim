@@ -1,14 +1,23 @@
 import gamestates
 import ../screenutils/texttables
-import std/algorithm
+import std/[algorithm, strutils]
 
-type Sensor = object
+proc formatDistance(f: float32): string =
+  formatFloat(f, precision = 4)
 
-var entries: seq[tuple[name: string, distance, speed: float32, faction: string]] = @[
-  ("Orion", 500, 5, "Alliance"),
-  ("Prometheus", 600, 20, "Incarnate"),
-  ("Sisyphus", 10000, 100.0, "Wanderers"),
-  ("Icarus", 13000, 95, "Wanderers")
+type
+  Sensor = object
+  Entry = object
+    name: string
+    distance {.tableStringify(formatDistance).}: float32
+    speed: float32
+    faction: string
+
+var entries: seq[Entry] = @[
+  Entry(name: "Orion", distance: 500, speed: 5, faction: "Alliance"),
+  Entry(name: "Prometheus", distance: 600, speed: 20, faction: "Incarnate"),
+  Entry(name: "Sisyphus", distance: 10000, speed: 100, faction: "Wanderers"),
+  Entry(name: "Icarus", distance: 13000, speed: 95, faction: "Wanderers")
 ]
 
 proc name(sensor: Sensor): string = "Sensor"
@@ -36,7 +45,7 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
 
   if active:
     entries = entries.sortedByIt(it.distance)
-    gameState.buffer.printTable(entries, entryProperties = props, formatProperties = TableFormatProps(floatSigDigs: 4))
+    gameState.buffer.printTable(entries, entryProperties = props)
 
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Sensor":

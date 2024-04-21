@@ -6,32 +6,26 @@ proc paramCount(T: typedesc[object or tuple]): int =
   for _ in default(T).fields:
     inc result
 
-proc tableFormat*(val: auto): string = $val
-
 proc alignRight*(s: string, count: Natural, padding = ' '): string =
   if s.len < count:
     result = padding.repeat(count - s.len)
   result.add s
-
 
 type
   TableKind* = enum
     NewLine
     Seperator
     Entry
-  TableFormatProps* = object
-    intSigDigs*: int
-    floatSigDigs*: int
   AlignFunction* = typeof(alignRight)
 
 template tableName*(s: string){.pragma.}
 template tableAlign*(_: AlignFunction){.pragma.}
+template tableStringify*(p: proc {.nimcall.}){.pragma.}
 
-iterator tableEntries[T](
+iterator tableEntries*[T](
   values: openArray[T],
   defaultProperties, headerProperties: GlyphProperties,
-  entryProperties: openArray[GlyphProperties],
-  formatProperties: TableFormatProps
+  entryProperties: openArray[GlyphProperties]
   ): tuple[msg: string, props: GlyphProperties, kind: TableKind] =
   var
     strings = newSeqOfCap[(string, GlyphProperties)](values.len * T.paramCount)
@@ -56,20 +50,12 @@ iterator tableEntries[T](
   var entryInd = 0
   for entry in values:
     fieldInd = 0
-    for field in entry.fields:
-      let str =
-        when field is SomeFloat:
-          if formatProperties.floatSigDigs > 0:
-            field.formatFloat(precision = formatProperties.floatSigDigs)
-          else:
-            $field
-        elif field is SomeInteger:
-          if formatProperties.intSigDigs > 0:
-            field.float.formatFloat(precision = formatProperties.intSigDigs)
-          else:
-            $field
-        else:
-          $field
+    let obj = entry # TODO: `hasCustomPragma` bug that requires this
+    for field in obj.fields:
+      when field.hasCustomPragma(tableStringify):
+        let str = field.getCustomPragmaVal(tableStringify)[0](field)
+      else:
+        let str = $field
 
 
       strings.add:
@@ -95,14 +81,39 @@ proc printTable*[T: object or tuple](
   buffer: var Buffer,
   table: openArray[T],
   headerProperties = none(GlyphProperties),
-  entryProperties: openArray[GlyphProperties] = @[],
-  formatProperties = TableFormatProps()
+  entryProperties: openArray[GlyphProperties] = @[]
 ) =
-  for str, props, kind in table.tableEntries(buffer.properties, headerProperties.get(buffer.properties), entryProperties, formatProperties):
+  for str, props, kind in table.tableEntries(buffer.properties, headerProperties.get(buffer.properties), entryProperties):
     case kind
     of Entry:
       buffer.put(str, props)
     of NewLine:
       buffer.newLine()
+    of Seperator:
+      buffer.put("|")
+
+
+proc printPaged*[T: object or tuple](
+  buffer: var Buffer,
+  table: openArray[T],
+  selected: int = -1,
+  headerProperties = none(GlyphProperties),
+  entryProperties: openArray[GlyphProperties] = @[]
+) =
+  var line = 0
+  if selected != -1:
+    buffer.put " " # Everything is offset
+  for str, props, kind in table.tableEntries(buffer.properties, headerProperties.get(buffer.properties), entryProperties):
+    case kind
+    of Entry:
+      buffer.put(str, props)
+    of NewLine:
+      buffer.newLine()
+      if selected != -1:
+        if line == selected:
+          buffer.put ">"
+        else:
+          buffer.put " "
+      inc line
     of Seperator:
       buffer.put("|")
