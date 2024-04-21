@@ -30,16 +30,19 @@ type
     properties: GlyphProperties
 
   Line = object
-    len: int
     glyphs: array[128, Glyph]
 
 iterator items(line: Line): Glyph =
-  for i in 0..<line.len:
-    yield line.glyphs[i]
+  for glyph in line.glyphs:
+    yield glyph
+
+iterator pairs(line: Line): (int, Glyph) =
+  for glyph in line.glyphs.pairs:
+    yield glyph
 
 iterator mitems(line: var Line): var Glyph =
-  for i in 0..<line.len:
-    yield line.glyphs[i]
+  for glyph in line.glyphs.mitems:
+    yield glyph
 
 type
   Buffer* = object
@@ -148,11 +151,16 @@ proc upload*(buffer: var Buffer, dt: float32) =
   buffer.fontTarget.model.clear()
   var rendered = false
   for ind in buffer.cameraPos .. buffer.cursorY:
-    for glyph in buffer.lines[ind]:
-      if glyph.rune == Rune(0):
-        continue
+    for xPos, glyph in buffer.lines[ind]:
+      if xPos > buffer.lineWidth:
+        break
       let
-        entry = buffer.atlas.runeEntry(glyph.rune)
+        rune =
+          if glyph.rune == Rune(0):
+            Rune(' ')
+          else:
+            glyph.rune
+        entry = buffer.atlas.runeEntry(rune)
         theFg = buffer.getColorIndex(glyph.properties.foreground)
         theBg = buffer.getColorIndex(glyph.properties.background)
         size =
@@ -168,12 +176,12 @@ proc upload*(buffer: var Buffer, dt: float32) =
       if glyph.properties.blinkSpeed == 0 or round(buffer.time * glyph.properties.blinkSpeed).int mod 2 != 0:
         rendered = true
         let
-          whiteSpaceBit = glyph.rune.isWhiteSpace.ord.uint32 shl 31
+          whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
           id = entry.id.uint32 or whiteSpaceBit
         buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: id , matrix: translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
-      if glyph.rune == Rune('\n'):
+      if rune == Rune('\n'):
         break
-      elif glyph.rune.isWhiteSpace:
+      elif rune.isWhiteSpace:
         x += buffer.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
       else:
         x += size.x
@@ -208,16 +216,16 @@ proc render*(buffer: Buffer) =
 
 proc clearLine*(buff: var Buffer, lineNum: int) =
   ## Writes over `start`
-  buff.lines[lineNum].len = 0
+  reset buff.lines[lineNum]
 
 proc clearLine*(buff: var Buffer) =
   ## Writes over `start`
-  buff.lines[buff.cursorY].len = 0
+  buff.clearLine(buff.cursorY)
   buff.cursorX = 0
 
 proc clearTo*(buff: var Buffer, line: int) =
   for line in buff.lines.toOpenArray(line, buff.lines.high).mitems:
-    line.len = 0
+    reset line
 
   buff.cursorY = line
   buff.cursorX = 0
@@ -228,16 +236,14 @@ proc clearTo*(buff: var Buffer, x, y: int) =
   for line in buff.lines.toOpenArray(y + 1, buff.lines.high).mitems:
     reset line
 
-  for glyph in buff.lines[y].glyphs.toOpenArray(x, buff.lines[y].len - 1).mitems:
+  for glyph in buff.lines[y].glyphs.toOpenArray(x, buff.lines[y].glyphs.high).mitems:
     reset glyph
-
-  buff.lines[y].len = x
 
   buff.lines.setLen(y + 1)
   buff.cursorX = x
 
 proc getPosition*(buff: var Buffer): (int, int) =
-  (buff.lines[^1].len - 1, buff.lines.high)
+  (buff.cursorX, buff.cursorY)
 
 proc newLine*(buff: var Buffer) =
   buff.lines.add Line()
@@ -250,16 +256,13 @@ proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
   if buff.lines.len == 0:
     buff.lines.add Line()
   for rune in s.runes:
-    if buff.cursorX < buff.lineWidth:
-      buff.lines[buff.cursorY].glyphs[buff.cursorX] = Glyph(rune: rune, properties: props)
-      inc buff.cursorX
-      buff.lines[buff.cursorY].len = max(buff.cursorX, buff.lines[buff.cursorY].len)
-
-
     if rune == Rune '\n':
       buff.lines.add Line()
       buff.cursorX = 0
       inc buff.cursorY
+    elif buff.cursorX < buff.lineWidth:
+      buff.lines[buff.cursorY].glyphs[buff.cursorX] = Glyph(rune: rune, properties: props)
+      inc buff.cursorX
 
   if buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
@@ -281,6 +284,7 @@ proc toBottom*(buffer: var Buffer) =
 
 proc setPosition*(buffer: var Buffer, x, y: int) =
   (buffer.cursorX, buffer.cursorY) = (x, y)
+  buffer.lines.setLen(max(y + 1, buffer.lines.len))
 
 when isMainModule:
   const clear = color(0, 0, 0, 0)
