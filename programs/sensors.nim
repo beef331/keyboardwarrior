@@ -1,5 +1,5 @@
 import gamestates
-import ../texttables
+import ../screenutils/texttables
 import std/algorithm
 
 type Sensor = object

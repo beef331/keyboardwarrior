@@ -1,4 +1,4 @@
-import ../texttables
+import ../screenutils/texttables
 import pkg/truss3D/inputs
 import std/[algorithm, strutils, math, random, sets]
 import gamestates

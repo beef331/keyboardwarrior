@@ -1,6 +1,6 @@
 import std/[strscans, strutils]
 import gamestates
-import ../screenrenderer
+import ../screenutils/screenrenderer
 
 var validNames {.compileTime.}: seq[string]
 proc handleTextChange(gamestate: var GameState, input: string) =

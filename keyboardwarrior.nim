@@ -1,5 +1,5 @@
 import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm, random]
-import screenrenderer, texttables
+import screenutils/screenrenderer
 import programs/[gamestates]
 import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]

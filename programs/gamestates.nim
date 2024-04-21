@@ -1,4 +1,4 @@
-import ../screenrenderer
+import ../screenutils/screenrenderer
 import pkg/[traitor, chroma, pixie]
 import std/[tables, strutils, hashes]
 import pkg/truss3D/inputs
