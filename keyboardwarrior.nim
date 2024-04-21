@@ -10,6 +10,9 @@ var
   coverTex: Texture
   screenShader, coverShader: Shader
   cameraPos: Vec3 = vec3(0.15, -0.6, -0.8)
+  rectModel: Model
+  time: float32
+
 
 proc init =
   gameState = GameState.init()
@@ -17,29 +20,42 @@ proc init =
   coverModel = loadModel("console.glb")
   coverTex = genTexture()
 
+  var modelData: MeshData[Vec2]
+  modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
+  modelData.append [0u32, 1, 2, 0, 2, 3].items
+  modelData.appendUv [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
+
+  rectModel = uploadData(modelData)
+
   readImage("console.png").copyTo coverTex
-  coverShader = loadShader(ShaderPath"vert.glsl", ShaderPath"frag.glsl")
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
 
 proc update(dt: float32) =
   gamestate.update(dt)
+  time += dt
 
-proc draw =
-  var
-    projMatrix = perspective(50f, screenSize().x / screenSize().y, 0.1, 50)
-    viewMatrix = (vec3(0, 0, -1).toAngles(vec3(0)).fromAngles())
-
+proc draw() =
   gamestate.buffer.render()
-  if gamestate.buffer.usingFrameBuffer:
-    glEnable(GlDepthTest)
-    with coverShader:
-      coverShader.setUniform("tex", coverTex)
-      coverShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(vec3(cameraPos))))
-      render(coverModel)
+  let
+    scrSize = screenSize().vec2
+    scale = min(scrSize.x / gameState.buffer.lineWidth.float32, scrSize.y / gameState.buffer.lineHeight.float32)
+    sizeX = (scale * gameState.buffer.lineWidth.float32)
+    sizeY = (scale * gameState.buffer.lineHeight.float32)
+    size = vec2(sizeX, sizeY) * 2 / scrSize
 
-    with screenShader:
-      screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture())
-      screenShader.setUniform("mvp", projMatrix * viewMatrix * (mat4() * translate(cameraPos)))
-      render(screenModel)
+  var pos = vec3((scrSize.x - sizeX) / 2, (scrSize.y - sizeY) / 2, 1) / vec3(scrSize, 1)
+  pos.y *= -1
+  pos.xy = pos.xy * 2f + vec2(-1f, 1f - size.y)
+
+  let mat = translate(pos) * scale(vec3(size, 0))
+
+
+  with screenShader:
+    screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture())
+    screenShader.setUniform("mvp", mat)
+    screenShader.setUniform("time", time)
+    screenShader.setUniform("lineHeight", gameState.buffer.lineHeight.float32)
+    render(rectModel)
+
 
 initTruss("Something", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)

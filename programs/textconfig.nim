@@ -18,6 +18,19 @@ proc handleTextChange(gamestate: var GameState, input: string) =
         gamestate.buffer.setFontSize(newSize)
       except CatchableError as e:
         gamestate.writeError(e.msg & "\n")
+    of "width", "height":
+      static: validNames.add "size"
+      foundName = true
+      try:
+        let newSize = parseInt(val)
+        if newSize notin 30..80:
+          raise (ref ValueError)(msg: "Expected value in $#, but got: $#" % [$(30..80), $newSize])
+        if toSetField[0] == 'h':
+          gamestate.buffer.setLineHeight(newSize)
+        else:
+          gamestate.buffer.setLineWidth(newSize)
+      except CatchableError as e:
+        gamestate.writeError(e.msg & "\n")
     of "font":
       static: validNames.add "font"
       foundName = true

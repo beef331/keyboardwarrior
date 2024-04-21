@@ -70,20 +70,20 @@ const
   guiFrag = ShaderPath"text.frag.glsl"
 
 proc recalculateBuffer*(buffer: var Buffer) =
-  let charEntry = buffer.atlas.runeEntry(Rune('+'))
-  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int
-  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int
+  let charEntry = buffer.atlas.runeEntry(Rune('W'))
+  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int div 2
+  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int div 2
   if buffer.lines.len == 0:
     buffer.lines.add Line()
   if buffer.useFrameBuffer:
     buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
-    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
+
     buffer.useFrameBuffer = true
     buffer.frameBufferSetup = true
 
 
 proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false) =
-  buffer.atlas = FontAtlas.init(1024f, 1024f, 3f, readFont(fontPath))
+  buffer.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
   buffer.shader = loadShader(guiVert, guiFrag)
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
@@ -92,7 +92,7 @@ proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false
 
   buffer.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
   buffer.colorSsbo = genSsbo[seq[Color]](1)
-  buffer.atlas.font.size = 18
+  buffer.atlas.font.size = 64
   buffer.noise = newOpenSimplex()
   buffer.useFrameBuffer = useFrameBuffer
   buffer.recalculateBuffer()
@@ -105,6 +105,14 @@ proc setFontSize*(buffer: var Buffer, size: int) =
 
 proc setFont*(buffer: var Buffer, font: Font) =
   buffer.atlas.setFont(font)
+  buffer.recalculateBuffer()
+
+proc setLineWidth*(buffer: var Buffer, width: int) =
+  buffer.lineWidth = width
+  buffer.recalculateBuffer()
+
+proc setLineHeight*(buffer: var Buffer, height: int) =
+  buffer.lineHeight = height
   buffer.recalculateBuffer()
 
 proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
@@ -205,8 +213,8 @@ proc getPosition*(buff: var Buffer): (int, int) =
 
 proc newLine*(buff: var Buffer) =
   buff.lines.add Line()
-  if buff.lines.high - buff.cameraPos > buff.lineHeight:
-    buff.cameraPos = buff.lines.high - buff.lineHeight
+  if buff.lines.high - buff.cameraPos >= buff.lineHeight:
+    buff.cameraPos = buff.lines.len - buff.lineHeight
 
 proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
   if buff.lines.len == 0:
@@ -218,8 +226,8 @@ proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
     if rune == Rune '\n':
       buff.lines.add Line()
 
-  if buff.lines.high - buff.cameraPos > buff.lineHeight:
-    buff.cameraPos = buff.lines.high - buff.lineHeight
+  if buff.lines.high - buff.cameraPos >= buff.lineHeight:
+    buff.cameraPos = buff.lines.len - buff.lineHeight
 
 proc put*(buff: var Buffer, s: string) =
   put buff, s, buff.properties

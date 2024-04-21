@@ -5,7 +5,7 @@ import pkg/truss3D/inputs
 
 export screenrenderer, chroma, pixie
 
-const maxTextSize* = 50
+const maxTextSize* = 80
 
 type InsensitiveString* = distinct string
 converter toString*(str: InsensitiveString): lent string = string(str)
@@ -76,10 +76,21 @@ proc add*(gameState: var GameState, command: Command) =
   gameState.handlers[InsensitiveString(command.name)] = command
 
 proc init*(_: typedesc[GameState]): GameState =
+  #[
   result.add Command(
     name: "toggle3d",
     help: "This toggles 3D view on and off",
     handler: proc(gameState: var GameState, _: string) = gamestate.buffer.toggleFrameBuffer()
+  )
+  ]#
+
+  result.add Command(
+    name: "debug",
+    help: "This toggles 3D view on and off",
+    handler: proc(gameState: var GameState, _: string) =
+      for i in 1..gameState.buffer.lineHeight:
+        gameState.buffer.put $i & repeat("=", gameState.buffer.lineWidth)
+        gameState.buffer.newLine()
   )
 
   result.add Command(
@@ -93,7 +104,7 @@ proc init*(_: typedesc[GameState]): GameState =
 
   result.buffer = Buffer(lineWidth: 80, lineHeight: 30, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   result.buffer.put(">")
-  result.buffer.initResources("PublicPixel.ttf")
+  result.buffer.initResources("PublicPixel.ttf", true)
 
 proc dispatchCommand(gameState: var GameState) =
   let input {.cursor.} = gameState.input
