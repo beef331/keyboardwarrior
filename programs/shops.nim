@@ -68,14 +68,36 @@ proc update(shop: var Shop, gameState: var GameState, dt: float32, active: bool)
 
 
     let
-      countPerPage = gameState.buffer.lineHeight - 3
+      countPerPage = gameState.buffer.lineHeight - 4
       page = shop.position div countPerPage
 
+    let start = gameState.buffer.getPosition()
     gameState.buffer.printPaged(shopData.toOpenArray(page * countPerPage, min((page + 1) * countPerPage - 1, shopData.high)), shop.position mod countPerPage)
-    if shop.state == Purchasing:
-      gamestate.buffer.clearLine()
-      gameState.buffer.put "Buying $# $# for $$$#." % [$shop.amount, shopData[shop.position].name, $(shop.amount * shopData[shop.position].cost)]
-      gameState.buffer.newLine()
+    case shop.state
+    of Purchasing:
+      let
+        pos = gameState.buffer.getPosition()
+        x = start[0] + abs(10 - gameState.buffer.lineWidth div 2)
+        y = start[1] + abs(5 - gameState.buffer.lineHeight div 2)
+        prop = GlyphProperties(foreground: parseHtmlColor"white", background: parseHtmlColor"#111111")
+
+      gameState.buffer.setPosition(x, y)
+      gameState.buffer.put " ".repeat(10), prop
+      gameState.buffer.setPosition(x, y + 1)
+      gameState.buffer.put " Buying $# " % $shop.amount, prop
+      gameState.buffer.setPosition(x, y + 2)
+      gameState.buffer.put " $# " % shopData[shop.position].name, prop
+      gameState.buffer.setPosition(x, y + 3)
+      gameState.buffer.put " for ", prop
+      gameState.buffer.setPosition(x, y + 4)
+      gameState.buffer.put " $# " % $(shop.amount * shopData[shop.position].cost), prop
+      gameState.buffer.setPosition(x, y + 5)
+      gameState.buffer.put " ".repeat(10), prop
+
+      gameState.buffer.setPosition(0, pos[1])
+
+    else:
+      discard
 
 
 

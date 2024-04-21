@@ -49,6 +49,8 @@ type
     lineHeight*: int
     lineWidth*: int
     cameraPos*: int
+    cursorX: int
+    cursorY: int
     atlas: FontAtlas
     shader: Shader
     fontTarget: UiRenderTarget
@@ -145,20 +147,30 @@ proc upload*(buffer: var Buffer, dt: float32) =
   var (x, y) = (-1f, 1f - buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y)
   buffer.fontTarget.model.clear()
   var rendered = false
-  for ind in buffer.cameraPos .. buffer.lines.high:
+  for ind in buffer.cameraPos .. buffer.cursorY:
     for glyph in buffer.lines[ind]:
+      if glyph.rune == Rune(0):
+        continue
       let
         entry = buffer.atlas.runeEntry(glyph.rune)
         theFg = buffer.getColorIndex(glyph.properties.foreground)
         theBg = buffer.getColorIndex(glyph.properties.background)
-        size = entry.rect.wh / scrSize
+        size =
+          if entry.rect.w == 0:
+            buffer.atlas.runeEntry(Rune('+')).rect.wh / scrSize
+          else:
+            entry.rect.wh / scrSize
+
       let
         sineOffset = sin((buffer.time + x) * glyph.properties.sineSpeed) * glyph.properties.sineStrength * size.y
         shakeOffsetX = buffer.noise.evaluate((buffer.time + x * ind.float) * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.x
         shakeOffsetY = buffer.noise.evaluate((buffer.time + y * ind.float) * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.y
       if glyph.properties.blinkSpeed == 0 or round(buffer.time * glyph.properties.blinkSpeed).int mod 2 != 0:
         rendered = true
-        buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: uint32 entry.id, matrix:  translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
+        let
+          whiteSpaceBit = glyph.rune.isWhiteSpace.ord.uint32 shl 31
+          id = entry.id.uint32 or whiteSpaceBit
+        buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: id , matrix: translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
       if glyph.rune == Rune('\n'):
         break
       elif glyph.rune.isWhiteSpace:
@@ -200,33 +212,56 @@ proc clearLine*(buff: var Buffer, lineNum: int) =
 
 proc clearLine*(buff: var Buffer) =
   ## Writes over `start`
-  buff.lines[^1].len = 0
+  buff.lines[buff.cursorY].len = 0
+  buff.cursorX = 0
 
 proc clearTo*(buff: var Buffer, line: int) =
   for line in buff.lines.toOpenArray(line, buff.lines.high).mitems:
     line.len = 0
 
+  buff.cursorY = line
+  buff.cursorX = 0
+
   buff.lines.setLen(line + 1)
+
+proc clearTo*(buff: var Buffer, x, y: int) =
+  for line in buff.lines.toOpenArray(y + 1, buff.lines.high).mitems:
+    reset line
+
+  for glyph in buff.lines[y].glyphs.toOpenArray(x, buff.lines[y].len - 1).mitems:
+    reset glyph
+
+  buff.lines[y].len = x
+
+  buff.lines.setLen(y + 1)
+  buff.cursorX = x
 
 proc getPosition*(buff: var Buffer): (int, int) =
   (buff.lines[^1].len - 1, buff.lines.high)
 
 proc newLine*(buff: var Buffer) =
   buff.lines.add Line()
-  if buff.lines.high - buff.cameraPos >= buff.lineHeight:
+  inc buff.cursorY
+  buff.cursorX = 0
+  if buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
 proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
   if buff.lines.len == 0:
     buff.lines.add Line()
   for rune in s.runes:
-    if buff.lines[^1].len < buff.lineWidth:
-      buff.lines[^1].glyphs[buff.lines[^1].len] = Glyph(rune: rune, properties: props)
-      inc buff.lines[^1].len
+    if buff.cursorX < buff.lineWidth:
+      buff.lines[buff.cursorY].glyphs[buff.cursorX] = Glyph(rune: rune, properties: props)
+      inc buff.cursorX
+      buff.lines[buff.cursorY].len = max(buff.cursorX, buff.lines[buff.cursorY].len)
+
+
     if rune == Rune '\n':
       buff.lines.add Line()
+      buff.cursorX = 0
+      inc buff.cursorY
 
-  if buff.lines.high - buff.cameraPos >= buff.lineHeight:
+  if buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
 proc put*(buff: var Buffer, s: string) =
@@ -243,6 +278,9 @@ proc toTop*(buffer: var Buffer) =
 
 proc toBottom*(buffer: var Buffer) =
   buffer.cameraPos = buffer.lines.high
+
+proc setPosition*(buffer: var Buffer, x, y: int) =
+  (buffer.cursorX, buffer.cursorY) = (x, y)
 
 when isMainModule:
   const clear = color(0, 0, 0, 0)
