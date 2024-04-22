@@ -1,4 +1,5 @@
 import ../screenutils/screenrenderer
+import ../data/spaceentity
 import pkg/[traitor, chroma, pixie]
 import std/[tables, strutils, hashes]
 import pkg/truss3D/inputs
@@ -46,6 +47,7 @@ type
     input: string
     programX: int
     programY: int
+    world*: World
 
 implTrait Program
 
@@ -107,8 +109,10 @@ proc init*(_: typedesc[GameState]): GameState =
     result.add command
 
   result.buffer = Buffer(lineWidth: 80, lineHeight: 30, properties: GlyphProperties(foreground: parseHtmlColor("White")))
-  result.buffer.put(">")
   result.buffer.initResources("PublicPixel.ttf", true)
+  if not result.world.isReady:
+    result.buffer.put "Shall we play a game?\n"
+    result.buffer.put "Enter your Ship name:\n"
 
 proc dispatchCommand(gameState: var GameState) =
   let input {.cursor.} = gameState.input
@@ -128,39 +132,58 @@ proc dispatchCommand(gameState: var GameState) =
 
 
 proc update*(gameState: var GameState, dt: float) =
-  for key, program in gamestate.programs:
-    if key != gameState.activeProgram:
-      program.update(gamestate, dt, false)
 
-  if gamestate.activeProgram == "":
-    if isTextInputActive():
-      if inputText().len > 0:
-        gameState.input.add inputText()
-        gameState.buffer.clearLine()
-        gameState.buffer.put(">" & gameState.input)
-      if KeyCodeReturn.isDownRepeating():
-        gameState.buffer.newLine()
-        gameState.dispatchCommand()
-        gameState.buffer.put(">")
-      if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
-        gameState.input.setLen(gameState.input.high)
-        gameState.buffer.clearLine()
-        gameState.buffer.put(">" & gameState.input)
-
-    if KeyCodeUp.isDownRepeating():
-      gameState.buffer.scrollUp()
-
-    if KeyCodeDown.isDownRepeating():
-      gameState.buffer.scrollDown()
-  else:
-    gameState.buffer.clearTo(gameState.programY)
-    gameState.buffer.cameraPos = gameState.programY
-    gameState.programs[gameState.activeProgram].update(gamestate, dt, true)
-
-
-    if KeyCodeEscape.isDown:
+  if not gamestate.world.isReady:
+    if inputText().len > 0:
+      gameState.input.add inputText()
+      gameState.buffer.clearLine()
+      gameState.buffer.put(gameState.input)
+    if KeyCodeReturn.isDownRepeating():
+      gameState.world.init(gameState.input, "") # TODO: Take a seed aswell
+      gameState.input.setLen(0)
+      gameState.buffer.clearTo(0)
       gameState.buffer.put ">"
-      gameState.activeProgram = ""
+
+    if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
+      gameState.input.setLen(gameState.input.high)
+      gameState.buffer.clearLine()
+      gameState.buffer.put(gameState.input)
+  else:
+    gamestate.world.update(dt)
+
+    for key, program in gamestate.programs:
+      if key != gameState.activeProgram:
+        program.update(gamestate, dt, false)
+
+    if gamestate.activeProgram == "":
+      if isTextInputActive():
+        if inputText().len > 0:
+          gameState.input.add inputText()
+          gameState.buffer.clearLine()
+          gameState.buffer.put(">" & gameState.input)
+        if KeyCodeReturn.isDownRepeating():
+          gameState.buffer.newLine()
+          gameState.dispatchCommand()
+          gameState.buffer.put(">")
+        if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
+          gameState.input.setLen(gameState.input.high)
+          gameState.buffer.clearLine()
+          gameState.buffer.put(">" & gameState.input)
+
+      if KeyCodeUp.isDownRepeating():
+        gameState.buffer.scrollUp()
+
+      if KeyCodeDown.isDownRepeating():
+        gameState.buffer.scrollDown()
+    else:
+      gameState.buffer.clearTo(gameState.programY)
+      gameState.buffer.cameraPos = gameState.programY
+      gameState.programs[gameState.activeProgram].update(gamestate, dt, true)
+
+
+      if KeyCodeEscape.isDown:
+        gameState.buffer.put ">"
+        gameState.activeProgram = ""
 
   gameState.buffer.upload(dt)
   setInputText("")
