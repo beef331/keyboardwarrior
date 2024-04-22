@@ -273,6 +273,9 @@ proc put*(buff: var Buffer, s: string) =
 proc scrollUp*(buff: var Buffer) =
   buff.cameraPos = max(buff.cameraPos - 1, 0)
 
+proc scrollTo*(buff: var Buffer, pos: int) =
+  buff.cameraPos = pos
+
 proc scrollDown*(buff: var Buffer) =
   buff.cameraPos = min(buff.cameraPos + 1, buff.lines.high)
 

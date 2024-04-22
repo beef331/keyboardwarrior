@@ -35,6 +35,7 @@ type
   Command* = object
     name*: string
     help*: string
+    manual*: string # Manpage
     handler*: CommandHandler
 
   GameState* = object
@@ -66,6 +67,9 @@ proc enterProgram*(gameState: var GameState, program: sink string) =
   gameState.activeProgram = program
 
 proc hasProgram*(gameState: var GameState, name: string): bool = name in gameState.programs
+
+proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.handlers
+proc getCommand*(gameState: var GameState, name: string): lent Command = gameState.handlers[InsensitiveString(name)]
 
 import programutils
 export programutils

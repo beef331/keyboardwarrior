@@ -3,8 +3,8 @@ import gamestates
 
 var storedCommands: seq[Command]
 
-proc command*(name, help: string, handler: CommandHandler) =
-  storedCommands.add Command(name: name, help: help, handler: handler)
+proc command*(name, help: string, handler: CommandHandler, manual = "") =
+  storedCommands.add Command(name: name, help: help, handler: handler, manual: manual)
 
 iterator commands*(): Command =
   for command in storedCommands:

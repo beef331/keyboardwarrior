@@ -20,8 +20,16 @@ proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
     buffer.put(node.text.replace("\n"), props)
   props = oldProp
 
-proc displayEvent(buffer: var Buffer, eventPath: string) =
-  let xml = readFile(eventPath).parseHtml()
+proc displayEvent*(buffer: var Buffer, event: string, isPath = true) =
+  let xml =
+    if isPath:
+      readFile(event).parseHtml()
+    else:
+      if event.len == 0: return
+      event.parseHtml()
+  if xml.len == 0:
+    return
+
   var props = buffer.properties
   for name, field in props.fieldPairs:
     let val = xml[0].attr(name.toLowerAscii())
