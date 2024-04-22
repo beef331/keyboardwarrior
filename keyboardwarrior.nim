@@ -1,4 +1,4 @@
-import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm, random]
+import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm, random, times, os]
 import screenutils/screenrenderer
 import programs/[gamestates]
 import pkg/truss3D/[inputs, models]
@@ -12,6 +12,7 @@ var
   cameraPos: Vec3 = vec3(0.15, -0.6, -0.8)
   rectModel: Model
   time: float32
+  shaderModificationTime: Time
 
 
 proc init =
@@ -29,10 +30,17 @@ proc init =
 
   readImage("console.png").copyTo coverTex
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
+  shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
 proc update(dt: float32) =
   gamestate.update(dt)
   time += dt
+
+  let currModTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
+  if shaderModificationTime < currModTime:
+    screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
+    shaderModificationTime = currModTime
+
 
 proc draw() =
   gamestate.buffer.render()
@@ -53,8 +61,6 @@ proc draw() =
   with screenShader:
     screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture())
     screenShader.setUniform("mvp", mat)
-    screenShader.setUniform("time", time)
-    screenShader.setUniform("lineHeight", gameState.buffer.lineHeight.float32)
     render(rectModel)
 
 
