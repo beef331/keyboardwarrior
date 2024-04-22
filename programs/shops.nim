@@ -19,9 +19,9 @@ type
     state: ShopState
 
   ShopEntry = object
-    name: string
+    name {.tableAlign(alignLeft).}: string
     count: int
-    cost {.tableAlign(alignLeft), tableStringify(moneyFormat[int]).}: int
+    cost {.tableStringify(moneyFormat[int]).}: int
 
 var shopData: seq[ShopEntry]
 
@@ -73,11 +73,25 @@ proc update(shop: var Shop, gameState: var GameState, dt: float32, active: bool)
       page = shop.position div countPerPage
 
     let start = gameState.buffer.getPosition()
-    gameState.buffer.printPaged(shopData.toOpenArray(page * countPerPage, min((page + 1) * countPerPage - 1, shopData.high)), shop.position mod countPerPage)
+    var props: seq[GlyphProperties]
+
+    let
+      objRange = page * countPerPage .. min((page + 1) * countPerPage - 1, shopData.high)
+      pageRelativeInd = shop.position mod countPerPage
+
+    for i in objRange:
+      let prop =
+        if i mod countPerPage == pageRelativeInd:
+          gameState.buffer.properties
+        else:
+          GlyphProperties(foreground: parseHtmlColor"#aaaaaa")
+      props.add [prop, prop, prop]
+
+
+    gameState.buffer.printPaged(shopData.toOpenArray(objRange.a, objRange.b), pageRelativeInd, entryProperties = props)
     gameState.buffer.setPosition(0, gameState.buffer.getPosition()[1])
     gameState.buffer.put "Press Return to purchase.\n"
     gameState.buffer.put "Press S to toggle Selling.\n"
-    gamestate.buffer.newLine()
 
     case shop.state
     of Purchasing:
@@ -91,9 +105,9 @@ proc update(shop: var Shop, gameState: var GameState, dt: float32, active: bool)
       gameState.buffer.setPosition(x, y)
       gameState.buffer.drawBox(
         [
-          "Buying " & $shop.amount,
+          "Buy " & $shop.amount,
           "$#s for" % shopData[shop.position].name,
-          "$" & $(shop.amount * shopData[shop.position].cost)
+          "$" & $(shop.amount * shopData[shop.position].cost) & "?"
         ],
         border = Outline
       )
@@ -103,10 +117,6 @@ proc update(shop: var Shop, gameState: var GameState, dt: float32, active: bool)
 
     else:
       discard
-
-
-
-
 
 proc shopHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Shop":
