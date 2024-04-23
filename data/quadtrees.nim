@@ -1,5 +1,5 @@
-import std/[intsets, deques]
-
+import std/[intsets, deques, setutils, math]
+const bucketSize = 64
 type
   QuadPos = enum
     TopLeft
@@ -13,23 +13,31 @@ type
     Parent
     Bucket
 
+  EntrySet = set[range[0 .. bucketSize - 1]]
+
   QuadNode = object
     x, y: int
     width, height: int
     parent: int = -1
     case kind: QuadNodeKind
     of Bucket:
-      bucket: array[64, QuadTreeIndex] # Should these just be `array[64, int]` where `int` is a ind into a sequence?
-      entries: int # When this is == bucket.len we divide
+      bucket: array[bucketSize, QuadTreeIndex]
+      entries: EntrySet
     of Parent:
       children: array[QuadPos, int] = [TopLeft: -1, -1, -1, -1]
 
-  QuadTree*[T] = object
+  QuadEntry* = concept q
+    q.x is SomeNumber
+    q.y is SomeNumber
+    q.node is int
+
+  QuadTree*[T: QuadEntry] = object
     nodes: seq[QuadNode]
     values: seq[T]
     inactiveValues: Intset
     width, height: int
 
+proc fullSet[T: range](_: typedesc[set[T]]): set[T] = {T.low..T.high}
 
 proc `[]`[T](tree: QuadTree[T], ind: QuadTreeIndex): lent T =
   tree.values[int ind]
@@ -58,7 +66,8 @@ proc transition(node: var QuadNode, inds: array[QuadPos, int]) =
     height: node.height,
     x: node.x,
     y: node.y,
-    children: inds
+    children: inds,
+    parent: node.parent
   )
 
 proc getNextIndex[T](tree: var QuadTree[T]): QuadTreeIndex =
@@ -80,28 +89,36 @@ proc init*[T](_: typedesc[QuadTree[T]], width, height: int): QuadTree[T] =
     nodes: @[bucket(0, 0, width, height, -1)]
   )
 
+proc contains*(node: QuadNode, val: QuadEntry): bool =
+  val.x in node.x .. node.x + node.width and
+  val.y in node.y .. node.y + node.height
+
 proc quadPos[T](tree: QuadTree[T], node: QuadNode, ind: QuadTreeIndex): QuadPos =
   let val = tree[ind]
-  if val.x >= node.x + node.width div 2:
-    if val.y >= node.y + node.height div 2:
-      BottomRight
-    else:
+  if val.x.int >= node.x + node.width div 2:
+    if val.y.int >= node.y + node.height div 2:
       TopRight
-  else:
-    if val.y >= node.y + node.height div 2:
-      BottomLeft
     else:
+      BottomRight
+  else:
+    if val.y.int >= node.y + node.height div 2:
       TopLeft
+    else:
+      BottomLeft
 
 proc add(node: var QuadNode, val: QuadTreeIndex) =
-  node.bucket[node.entries] = val
-  inc node.entries
+  var ind = 0
+  for entry in node.entries.complement:
+    ind = entry
+    break
+  node.bucket[ind] = val
+  node.entries.incl ind
 
-proc add[T](node: var QuadNode, tree: var QuadTree[T], val: sink T, ind: int, valInd: QuadTreeIndex): int =
-  if val.x in node.x ..< node.x + node.width and val.y in node.y ..< node.y + node.height:
-
-    if node.kind == Bucket:
-      if node.entries == node.bucket.len:
+proc add[T](node: var QuadNode, tree: var QuadTree[T], val: var T, ind: int, valInd: QuadTreeIndex) =
+  if val.x.int in node.x ..< node.x + node.width and val.y.int in node.y ..< node.y + node.height:
+    case node.kind:
+    of Bucket:
+      if node.entries == EntrySet.fullSet(): # Split bucket
         let
           newWidth = node.width div 2
           newHeight = node.height div 2
@@ -122,59 +139,71 @@ proc add[T](node: var QuadNode, tree: var QuadTree[T], val: sink T, ind: int, va
           entry.parent = ind
 
         let len = tree.nodes.len
-        for val in node.bucket.toOpenArray(0, node.entries - 1):
+        for val in node.bucket.toOpenArray(0, node.entries.len - 1):
           let ind = tree.quadPos(node, val)
           newNodes[ind].add val
+          tree[val].node = len + ind.ord()
         node.transition [TopLeft: len, len + 1, len + 2, len + 3]
 
         tree.nodes.add newNodes
 
-        let ind = tree.quadPos(node, QuadTreeIndex tree.values.high)
-        tree.nodes[node.children[ind]].add(tree, val, node.children[ind], valInd)
+        let childInd = tree.quadPos(node, QuadTreeIndex tree.values.high)
+        tree.nodes[node.children[childInd]].add(tree, val, node.children[childInd], valInd)
 
       else:
         node.add valInd
-        ind
+        tree[valInd].node = ind
 
-    else:
+    of Parent:
+      let childInd = tree.quadPos(node, QuadTreeIndex tree.values.high)
+      tree.nodes[node.children[childInd]].add(tree, val, node.children[childInd], valInd)
 
-      let ind = tree.quadPos(node, QuadTreeIndex tree.values.high)
-      tree.nodes[node.children[ind]].add(tree, val, node.children[ind], valInd)
-  else:
-    -1
-
-proc add*[T](tree: var QuadTree[T], val: sink T): (int, QuadTreeIndex) =
+proc add*[T](tree: var QuadTree[T], val: sink T): QuadTreeIndex =
   let valInd = tree.getNextIndex()
   tree[valInd] = val
-  (tree.nodes[0].add(tree, val, 0, valInd), valInd)
+  tree.nodes[0].add(tree, tree[valInd], 0, valInd)
+  valInd
+
+proc reposition*[T](tree: var QuadTree[T]) =
+  for i, val in tree.values.mpairs:
+    if i notin tree.inactiveValues:
+      let startNode = val.node
+      if val notin tree.nodes[val.node]:
+        tree.nodes[0].add(tree, val, 0, QuadTreeIndex i)
+
+      if val.node != startNode:
+        for entInd in tree.nodes[startNode].entries:
+          if tree.nodes[startNode].bucket[entInd].int == i:
+            tree.nodes[startNode].entries.excl entInd
+
 
 iterator items*[T](tree: QuadTree[T], ind: int): lent T =
   let node = tree.nodes[ind]
   if node.kind == Bucket:
-    for x in node.bucket.toOpenArray(0, node.entries - 1):
-      yield tree[x]
+    for ind in node.entries:
+      yield tree[node.bucket[ind]]
   else:
     var queue = @[ind]
     while queue.len > 0:
       let ind = queue.pop()
       if tree.nodes[ind].kind == Bucket:
-        for x in tree.nodes[ind].bucket.toOpenArray(0, tree.nodes[ind].entries - 1):
-          yield tree[x]
+        for ind in node.entries:
+          yield tree[node.bucket[ind]]
       else:
         queue.add tree.nodes[ind].children
 
-iterator mitems*[T](tree: QuadTree[T], ind: int): var T =
+iterator mitems*[T](tree: var QuadTree[T], ind: int): var T =
   let node = tree.nodes[ind]
   if node.kind == Bucket:
-    for x in node.bucket.toOpenArray(0, node.entries - 1):
-      yield x
+    for ind in node.entries:
+      yield tree[node.bucket[ind]]
   else:
     var queue = @[ind]
     while queue.len > 0:
       let ind = queue.pop()
       if tree.nodes[ind] == Bucket:
-        for x in tree.nodes[ind].bucket.toOpenArray(0, tree.nodes[ind].entries - 1).mitems:
-          yield x
+        for ind in node.entries:
+          yield tree[node.bucket[ind]]
       else:
         queue.add tree.nodes[ind].children
 
@@ -205,22 +234,39 @@ iterator upwardSearch*[T](tree: QuadTree[T], nodeIndex: int): lent T =
         if child notin visited:
           queue.addFirst child
           visited.incl child
-        if node.parent != -1:
-          queue.addLast(node.parent)
-          visited.incl node.parent
+    if node.parent != -1 and node.parent notin visited:
+      queue.addLast(node.parent)
+      visited.incl node.parent
 
 
 when isMainModule:
-  import std/enumerate
+  import std/[enumerate, algorithm]
   type MyType = object
     x, y: int
+    name: string
+    node: int
 
-  var tree = QuadTree[MyType].init(10, 10)
+  var
+    tree = QuadTree[MyType].init(10, 10)
+    firstVal: QuadTreeIndex
   for x in 0..<10:
     for y in 0..<10:
-      discard tree.add MyType(x: x, y: y)
+      if x == 0 and y == 0:
+        firstVal = tree.add MyType(x: x, y: y, name: $x & ", " & $y)
+      else:
+        discard tree.add MyType(x: x, y: y, name: $x & ", " & $y)
 
-  for i, val in enumerate tree.upwardSearch(3):
-    if i > 10:
+  tree[firstVal].x = 6
+  tree[firstVal].y = 4
+  tree.reposition()
+
+
+  var found: seq[MyType]
+  for i, val in enumerate tree.upwardSearch(tree[firstVal].node):
+    if i > 20:
       break
-    echo val
+    found.add val
+
+  echo found.sortedByIt(sqrt(
+    ((it.x - tree[firstVal].x) * (it.x - tree[firstVal].x)).float +
+    ((it.y - tree[firstVal].y) * (it.y - tree[firstVal].y)).float))
