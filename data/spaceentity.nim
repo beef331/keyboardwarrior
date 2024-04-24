@@ -99,7 +99,8 @@ proc update*(world: var World, dt: float32) =
     entity.x += dt * entity.velocity * xOffset
     entity.y += dt * entity.velocity * xOffset
 
-  world.activeChunks[0].entities.reposition()
+  for toMove in world.activeChunks[0].entities.reposition():
+    discard toMove # TODO: Move this to the next chunk
 
 iterator nonPlayerEntities*(world: World): lent SpaceEntity =
   for i, ent in world.activeChunks[0].entities.upwardSearch(world.activeChunks[0].entities[world.player].node):

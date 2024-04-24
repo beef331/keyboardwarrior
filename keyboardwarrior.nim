@@ -57,11 +57,14 @@ proc draw() =
 
   let mat = translate(pos) * scale(vec3(size, 0))
 
-
-  with screenShader:
-    screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture())
-    screenShader.setUniform("mvp", mat)
-    render(rectModel)
+  if screenShader.Gluint > 0:
+    with screenShader:
+      screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture(), required = false)
+      screenShader.setUniform("mvp", mat, required = false)
+      screenShader.setUniform("fontHeight", gameState.buffer.fontSize, required = false)
+      screenShader.setUniform("time", time, required = false)
+      screenShader.setUniform("screenSize", scrSize, required = false)
+      render(rectModel)
 
 
 initTruss("Something", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)

@@ -167,20 +167,37 @@ proc add*[T](tree: var QuadTree[T], val: sink T): QuadTreeIndex =
   tree.nodes[0].add(tree, tree[valInd], 0, valInd)
   valInd
 
-proc reposition*[T](tree: var QuadTree[T]) =
+proc delete*(node: var QuadNode, ind: QuadTreeIndex) =
+  for i, x in node.bucket:
+    if x == ind:
+      node.entries.excl i
+
+proc delete*[T](tree: var QuadTree[T], ind: QuadTreeIndex) =
+  tree.nodes[tree[ind].node].delete(ind)
+  reset tree[ind]
+  tree.inactiveValues.incl ind.int
+
+iterator reposition*[T](tree: var QuadTree[T]): QuadTreeIndex =
+  ## Repositions all entities to their proper bucket
+  ## Any entity that leaves the tree is yielded then destroyed
   for i, val in tree.values.mpairs:
-    if i notin tree.inactiveValues and val.x.int in 0..<tree.width and val.y.int in 0..<tree.height:
-      let startNode = val.node
-      #assert tree.nodes[startNode].kind == Bucket
+    if i notin tree.inactiveValues:
+      if val.x.int in 0..<tree.width and val.y.int in 0..<tree.height:
+        let startNode = val.node
+        #assert tree.nodes[startNode].kind == Bucket
 
-      if val notin tree.nodes[val.node]:
-        tree.nodes[0].add(tree, val, 0, QuadTreeIndex i)
+        if val notin tree.nodes[val.node]:
+          tree.nodes[0].add(tree, val, 0, QuadTreeIndex i)
 
-      if val.node != startNode:
-        assert tree.nodes[val.node].kind == Bucket
-        for entInd in tree.nodes[startNode].entries.items:
-          if tree.nodes[startNode].bucket[entInd].int == i:
-            tree.nodes[startNode].entries.excl entInd
+        if val.node != startNode:
+          assert tree.nodes[val.node].kind == Bucket
+          for entInd in tree.nodes[startNode].entries.items:
+            if tree.nodes[startNode].bucket[entInd].int == i:
+              tree.nodes[startNode].entries.excl entInd
+      else:
+        yield QuadTreeIndex i
+        tree.delete(QuadTreeIndex i)
+
 
 iterator items*[T](tree: QuadTree[T], ind: int): lent T =
   let node = tree.nodes[ind]
