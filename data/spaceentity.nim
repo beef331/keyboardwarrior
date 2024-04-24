@@ -1,4 +1,5 @@
-import std/[tables, random, hashes, sysrand]
+import std/[tables, random, hashes, sysrand, math]
+import quadtrees
 
 type
   InventoryEntry = object
@@ -18,8 +19,19 @@ type
     Ship
     Station
 
+  Faction* = enum
+    Universe
+    Netural
+    Alliance
+    Grefeni
+    Kulvan
+    Jiborn
+    #Custom = 16
+
   SpaceEntity = object
-    name*, faction*: string
+    name*: string
+    faction*: Faction
+    node: int
     x*, y*: float
     velocity*: float
     heading: float
@@ -27,15 +39,17 @@ type
     compartments: seq[Compartment]
 
   Chunk = object
-    entities: seq[SpaceEntity]
-    nameToEntityInd: Table[string, int]
+    entities: QuadTree[SpaceEntity]
+    nameToEntityInd: Table[string, QuadTreeIndex]
     nameCount: CountTable[string]
 
   World* = object
+    player: QuadTreeIndex
     playerName: string # GUID no other ship can use this
     seed: int # Start seed to allow reloading state from chunks
     randState: Rand
     activeChunks: seq[Chunk] # Load N number of chunks around player
+
 
 
 proc isReady*(world: World): bool = world.playerName.len != 0
@@ -50,33 +64,44 @@ proc init*(world: var World, playerName, seed: string) =
     copyMem(world.seed.addr, val.addr, sizeof(int))
 
   world.randState = initRand(world.seed)
-  world.activeChunks.add Chunk(entities: @[SpaceEntity(name: playerName)], nameToEntityInd: {playerName: 0}.toTable())
+  var qt = QuadTree[SpaceEntity].init(1000, 1000)
+  world.player = qt.add SpaceEntity(name: playerName)
+  world.activeChunks.add Chunk(entities: qt, nameToEntityInd: {playerName: world.player}.toTable())
 
-  const
-    entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
-    factionNames = ["Alliance", "Gerenfi", "Kulvan", "Ura Space Allies"]
+  const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
 
-  for _ in 0..world.randState.rand(5..40):
+  for _ in 0..1000:
     let
       selectedName = world.randState.sample(entityNames)
       name = selectedName & $world.activeChunks[0].nameCount.getOrDefault(selectedName)
-      x = world.randState.rand(-1000d..1000d)
-      y = world.randState.rand(-1000d..1000d)
-      vel = world.randState.rand(1d..10d)
-      faction = world.randState.sample(factionNames)
+      x = world.randState.rand(0d..1000d)
+      y = world.randState.rand(0d..1000d)
+      vel = world.randState.rand(5d..20d)
+      faction = world.randState.rand(Faction)
+      heading = world.randState.rand(0d..Tau)
 
 
-
-    world.activeChunks[0].entities.add SpaceEntity(name: name, x: x, y: y, velocity: vel, faction: faction)
-    world.activeChunks[0].nameToEntityInd[name] = world.activeChunks[0].entities.high
+    world.activeChunks[0].nameToEntityInd[name] = world.activeChunks[0].entities.add SpaceEntity(
+      name: name,
+      x: x,
+      y: y,
+      velocity: vel,
+      faction: faction,
+      heading: heading
+      )
     inc world.activeChunks[0].nameCount, selectedName
 
 proc update*(world: var World, dt: float32) =
   for entity in world.activeChunks[0].entities.mitems:
-    entity.x += dt * entity.velocity
+    let
+      xOffset = cos(entity.heading)
+      yOffset = sin(entity.heading)
+    entity.x += dt * entity.velocity * xOffset
+    entity.y += dt * entity.velocity * xOffset
+
+  world.activeChunks[0].entities.reposition()
 
 iterator nonPlayerEntities*(world: World): lent SpaceEntity =
-  let playerInd = world.activeChunks[0].nameToEntityInd[world.playerName]
-  for i, ent in world.activeChunks[0].entities:
-    if i != playerInd:
+  for i, ent in world.activeChunks[0].entities.upwardSearch(world.activeChunks[0].entities[world.player].node):
+    if i != world.player:
       yield ent

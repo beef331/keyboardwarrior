@@ -7,14 +7,17 @@ proc formatDistance(f: float32): string =
   formatFloat(f, precision = 6)
 proc formatSpeed(f: float32): string =
   formatFloat(f, precision = 3)
-
+proc formatPos(f: float32): string =
+  formatFloat(f, precision = 5)
 type
   Sensor = object
   Entry = object
     name: string
+    x {.tableStringify(formatSpeed).}: float32
+    y {.tableStringify(formatSpeed).}: float32
     distance {.tableStringify(formatDistance).}: float32
     speed {.tableStringify(formatSpeed).}: float32
-    faction: string
+    faction: Faction
 
 proc name(sensor: Sensor): string = "Sensor"
 proc onExit(sensor: var Sensor, gameState: var GameState) = discard
@@ -29,19 +32,29 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
 
     var entries: seq[Entry]
     for entry in gameState.world.nonPlayerEntities:
+      if entries.len > 10:
+        break
       let dist = sqrt(entry.x * entry.x + entry.y * entry.y)
-      entries.add Entry(name: entry.name, distance: dist, speed: entry.velocity, faction: entry.faction)
+      entries.add Entry(
+        name: entry.name,
+        distance: dist,
+        x: entry.x,
+        y: entry.y,
+        speed: entry.velocity,
+        faction: entry.faction)
 
 
     entries = entries.sortedByIt(it.distance)
     for entry in entries:
-      if entry.faction == "Alliance":
+      if entry.faction == Alliance:
         props.add red
       else:
         props.add nameProp
       props.add gameState.buffer.properties
       props.add gameState.buffer.properties
-      if entry.faction == "Alliance":
+      props.add gameState.buffer.properties
+      props.add gameState.buffer.properties
+      if entry.faction == Alliance:
         props.add red
       else:
         props.add yellow
