@@ -90,7 +90,7 @@ Sets the terminal text color.<br/>
 Can be any HTML color, including rgb hexadecimal<br/>
 <br/><br/>
 
-<p background = "#aaaaaa">`text background color`</p><br/>
+<p background = "#0a0a0a">`text background color`</p><br/>
 Sets the terminal background color.<br/>
 Can be any HTML color, including rgb hexadecimal<br/>
 <br/><br/>

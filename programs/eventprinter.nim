@@ -17,7 +17,7 @@ proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
       for child in node:
         buffer.printTree(child, props)
   else:
-    buffer.put(node.text.replace("\n"), props)
+    buffer.put(node.text.multiReplace({"\n": "", "  ": ""}), props)
   props = oldProp
 
 proc displayEvent*(buffer: var Buffer, event: string, isPath = true) =

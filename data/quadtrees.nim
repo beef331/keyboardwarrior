@@ -169,7 +169,7 @@ proc add*[T](tree: var QuadTree[T], val: sink T): QuadTreeIndex =
 
 proc reposition*[T](tree: var QuadTree[T]) =
   for i, val in tree.values.mpairs:
-    if i notin tree.inactiveValues:
+    if i notin tree.inactiveValues and val.x.int in 0..<tree.width and val.y.int in 0..<tree.height:
       let startNode = val.node
       #assert tree.nodes[startNode].kind == Bucket
 
