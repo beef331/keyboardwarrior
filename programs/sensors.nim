@@ -3,19 +3,16 @@ import ../screenutils/texttables
 import ../data/spaceentity
 import std/[algorithm, strutils]
 
-proc formatDistance(f: float32): string =
-  formatFloat(f, precision = 6)
 proc formatSpeed(f: float32): string =
-  formatFloat(f, precision = 3)
-proc formatPos(f: float32): string =
-  formatFloat(f, precision = 5)
+  formatFloat(f, ffDecimal, precision = 2)
+
 type
   Sensor = object
   Entry = object
     name: string
     x {.tableStringify(formatSpeed).}: float32
     y {.tableStringify(formatSpeed).}: float32
-    distance {.tableStringify(formatDistance).}: float32
+    distance {.tableStringify(formatSpeed).}: float32
     speed {.tableStringify(formatSpeed).}: float32
     faction: Faction
 
@@ -31,10 +28,14 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
       red = GlyphProperties(foreground: parseHtmlColor"red")
 
     var entries: seq[Entry]
+    let player = gameState.world.player
     for entry in gameState.world.nonPlayerEntities:
-      if entries.len > 10:
+      if entries.len > 20:
         break
-      let dist = sqrt(entry.x * entry.x + entry.y * entry.y)
+      let
+        deltaX = entry.x - player.x
+        deltaY = entry.y - player.y
+        dist = sqrt(deltaX * deltaX + deltaY * deltaY)
       entries.add Entry(
         name: entry.name,
         distance: dist,

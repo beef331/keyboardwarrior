@@ -65,7 +65,7 @@ proc init*(world: var World, playerName, seed: string) =
 
   world.randState = initRand(world.seed)
   var qt = QuadTree[SpaceEntity].init(1000, 1000)
-  world.player = qt.add SpaceEntity(name: playerName)
+  world.player = qt.add SpaceEntity(name: playerName, x: 500, y: 500)
   world.activeChunks.add Chunk(entities: qt, nameToEntityInd: {playerName: world.player}.toTable())
 
   const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
@@ -74,8 +74,8 @@ proc init*(world: var World, playerName, seed: string) =
     let
       selectedName = world.randState.sample(entityNames)
       name = selectedName & $world.activeChunks[0].nameCount.getOrDefault(selectedName)
-      x = world.randState.rand(0d..1000d)
-      y = world.randState.rand(0d..1000d)
+      x = world.randState.rand(250d..750d)
+      y = world.randState.rand(250d..750d)
       vel = world.randState.rand(5d..20d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
@@ -105,3 +105,6 @@ iterator nonPlayerEntities*(world: World): lent SpaceEntity =
   for i, ent in world.activeChunks[0].entities.upwardSearch(world.activeChunks[0].entities[world.player].node):
     if i != world.player:
       yield ent
+
+proc player*(world: World): lent SpaceEntity =
+  world.activeChunks[0].entities[world.player]
