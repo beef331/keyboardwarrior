@@ -70,13 +70,13 @@ proc init*(world: var World, playerName, seed: string) =
 
   const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
 
-  for _ in 0..1000:
+  for _ in 0..128:
     let
       selectedName = world.randState.sample(entityNames)
       name = selectedName & $world.activeChunks[0].nameCount.getOrDefault(selectedName)
       x = world.randState.rand(250d..750d)
-      y = world.randState.rand(250d..750d)
-      vel = world.randState.rand(5d..20d)
+      y =  world.randState.rand(250d..750d)
+      vel =  world.randState.rand(0.1d..0.4d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
 
@@ -97,7 +97,9 @@ proc update*(world: var World, dt: float32) =
       xOffset = cos(entity.heading)
       yOffset = sin(entity.heading)
     entity.x += dt * entity.velocity * xOffset
-    entity.y += dt * entity.velocity * xOffset
+    entity.y += dt * entity.velocity * yOffset
+
+  discard world.activeChunks[0].entities[world.player]
 
   for toMove in world.activeChunks[0].entities.reposition():
     discard toMove # TODO: Move this to the next chunk

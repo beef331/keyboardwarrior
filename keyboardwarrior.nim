@@ -33,7 +33,7 @@ proc init =
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
 proc update(dt: float32) =
-  gamestate.update(dt)
+  gamestate.update(dt * 10)
   time += dt
 
   let currModTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))

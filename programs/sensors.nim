@@ -30,7 +30,7 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
     var entries: seq[Entry]
     let player = gameState.world.player
     for entry in gameState.world.nonPlayerEntities:
-      if entries.len > 20:
+      if entries.len > 100:
         break
       let
         deltaX = entry.x - player.x
@@ -46,7 +46,7 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
 
 
     entries = entries.sortedByIt(it.distance)
-    for entry in entries:
+    for entry in entries.toOpenArray(0, min(entries.high, 10)):
       if entry.faction == Alliance:
         props.add red
       else:
@@ -60,7 +60,7 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
       else:
         props.add yellow
 
-    gameState.buffer.printTable(entries, entryProperties = props)
+    gameState.buffer.printTable(entries.toOpenArray(0, min(entries.high, 10)), entryProperties = props)
 
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Sensor":
