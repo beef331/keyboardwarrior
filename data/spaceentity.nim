@@ -70,16 +70,15 @@ proc init*(world: var World, playerName, seed: string) =
 
   const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
 
-  for _ in 0..128:
+  for _ in 0..100000:
     let
       selectedName = world.randState.sample(entityNames)
       name = selectedName & $world.activeChunks[0].nameCount.getOrDefault(selectedName)
-      x = world.randState.rand(250d..750d)
-      y =  world.randState.rand(250d..750d)
-      vel =  world.randState.rand(0.1d..0.4d)
+      x = world.randState.rand(100d..900d)
+      y =  world.randState.rand(100d..900d)
+      vel =  world.randState.rand(1d..10d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
-
 
     world.activeChunks[0].nameToEntityInd[name] = world.activeChunks[0].entities.add SpaceEntity(
       name: name,
@@ -99,13 +98,11 @@ proc update*(world: var World, dt: float32) =
     entity.x += dt * entity.velocity * xOffset
     entity.y += dt * entity.velocity * yOffset
 
-  discard world.activeChunks[0].entities[world.player]
-
   for toMove in world.activeChunks[0].entities.reposition():
     discard toMove # TODO: Move this to the next chunk
 
 iterator nonPlayerEntities*(world: World): lent SpaceEntity =
-  for i, ent in world.activeChunks[0].entities.upwardSearch(world.activeChunks[0].entities[world.player].node):
+  for i, ent in world.activeChunks[0].entities.inRangePairs(450, 450, 100, 100):
     if i != world.player:
       yield ent
 

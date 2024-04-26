@@ -2,12 +2,14 @@ import gamestates
 import ../screenutils/texttables
 import ../data/spaceentity
 import std/[algorithm, strutils]
+import pkg/truss3D/inputs
 
 proc formatSpeed(f: float32): string =
   formatFloat(f, ffDecimal, precision = 2)
 
 type
   Sensor = object
+    page: int
   Entry = object
     name: string
     x {.tableStringify(formatSpeed).}: float32
@@ -30,8 +32,6 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
     var entries: seq[Entry]
     let player = gameState.world.player
     for entry in gameState.world.nonPlayerEntities:
-      if entries.len > 100:
-        break
       let
         deltaX = entry.x - player.x
         deltaY = entry.y - player.y
@@ -46,7 +46,22 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
 
 
     entries = entries.sortedByIt(it.distance)
-    for entry in entries.toOpenArray(0, min(entries.high, 10)):
+
+    if KeyCodeDown.isDownRepeating():
+      inc sensor.page
+
+    if KeyCodeUp.isDownRepeating():
+      dec sensor.page
+
+
+    let
+      entriesPerPage = gamestate.buffer.lineHeight - 3
+      pages = entries.len div entriesPerPage
+
+    sensor.page = clamp(sensor.page, 0, pages)
+    let currentEntry = sensor.page * entriesPerPage
+
+    for entry in entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)):
       if entry.faction == Alliance:
         props.add red
       else:
@@ -60,7 +75,7 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
       else:
         props.add yellow
 
-    gameState.buffer.printTable(entries.toOpenArray(0, min(entries.high, 10)), entryProperties = props)
+    gameState.buffer.printPaged(entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)), entryProperties = props)
 
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Sensor":

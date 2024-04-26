@@ -128,18 +128,21 @@ proc contains*(node: QuadNode, val: QuadEntry): bool =
   val.x.int in node.x .. node.x + node.width and
   val.y.int in node.y .. node.y + node.height
 
-proc quadPos[T](tree: QuadTree[T], node: QuadNode, ind: QuadTreeIndex): QuadPos =
-  let val = tree[ind]
-  if val.x.int >= node.x + node.width div 2:
-    if val.y.int >= node.y + node.height div 2:
+proc quadPos[T](tree: QuadTree[T], node: QuadNode, pos: tuple[x, y: int]): QuadPos =
+  if pos.x > node.x + node.width div 2:
+    if pos.y > node.y + node.height div 2:
       TopRight
     else:
       BottomRight
   else:
-    if val.y.int >= node.y + node.height div 2:
+    if pos.y.int > node.y + node.height div 2:
       TopLeft
     else:
       BottomLeft
+
+proc quadPos[T](tree: QuadTree[T], node: QuadNode, ind: QuadTreeIndex): QuadPos =
+  let val = tree[ind]
+  tree.quadPos(node, (val.x.int, val.y.int))
 
 proc add(node: var QuadNode, val: QuadTreeIndex) =
   assert node.kind == Bucket
@@ -212,7 +215,9 @@ iterator items*[T](tree: QuadTree[T], ind: int): lent T =
     for ind in node.items:
       yield tree[ind]
   of Parent:
-    var queue = @[ind]
+    var queue {.global.}: seq[int]
+    queue.setLen(1)
+    queue[0] = ind
     while queue.len > 0:
       let
         ind = queue.pop()
@@ -231,7 +236,9 @@ iterator pairs*[T](tree: QuadTree[T], ind: int): (QuadTreeIndex, lent T) =
     for ind in node.items:
       yield (ind, tree[ind])
   of Parent:
-    var queue = @[ind]
+    var queue {.global.}: seq[int]
+    queue.setLen(1)
+    queue[0] = ind
     while queue.len > 0:
       let
         ind = queue.pop()
@@ -250,7 +257,9 @@ iterator mitems*[T](tree: var QuadTree[T], ind: int): var T =
     for ind in node.items:
       yield tree[ind]
   of Parent:
-    var queue = @[ind]
+    var queue {.global.}: seq[int]
+    queue.setLen(1)
+    queue[0] = ind
     while queue.len > 0:
       let
         ind = queue.pop()
@@ -276,10 +285,11 @@ iterator pairs*[T](tree: QuadTree[T]): (QuadTreeIndex, lent T) =
 
 iterator upwardSearch*[T](tree: QuadTree[T], nodeIndex: int): (QuadTreeIndex, lent T) =
   var
-    queue = @[nodeIndex].toDeque
+    queue {.global.}: Deque[int]
     visited: IntSet
   visited.incl nodeIndex
-
+  queue.clear()
+  queue.addFirst(nodeIndex)
   while queue.len > 0:
     let
       ind = queue.popFirst()
@@ -304,7 +314,10 @@ proc toTransitionCount[T](tree: QuadTree[T], node: int): (int, BucketArr) =
   ## Returns `-1, ...` in the case count > 64
   ## Returns `0, ...` in the case the node should be considered for deletion
   ## Returns `ind,....` in the case the node should be be converted to a bucket
-  var queue = @[node]
+  var queue {.global.}: seq[int]
+  queue.setLen(1)
+  queue[0] = node
+
   while queue.len > 0:
     let
       ind = queue.pop()
@@ -322,7 +335,7 @@ proc toTransitionCount[T](tree: QuadTree[T], node: int): (int, BucketArr) =
       queue.add node.children
 
 proc maybeCollapse[T](tree: var QuadTree[T], nodeInd: int) =
-  if nodeInd != 0 and tree.nodes[nodeInd].kind == Parent:
+  if tree.nodes[nodeInd].kind == Parent:
     let (ind, val) = tree.toTransitionCount(nodeInd)
     if ind > 0:
       tree.nodes[nodeInd].transition(val.toOpenArray(0, ind - 1))
@@ -368,7 +381,60 @@ iterator reposition*[T](tree: var QuadTree[T]): QuadTreeIndex =
         tree.maybeCollapse(tree.nodes[startNode].parent)
     else:
       yield ind
-      #tree.delete(ind) # TODO Delete
+      tree.delete(ind)
+
+proc contains(bottomLeft, topRight: tuple[x, y: int], point: tuple[x, y: int]): bool =
+  point.x in bottomLeft.x .. topRight.x and
+  point.y in bottomLeft.y .. topRight.y
+
+proc overlap(node: QuadNode, bottomLeft, topRight: tuple[x, y: int]): bool =
+  bottomLeft.x < node.x + node.width and node.x < topRight.x and
+  bottomLeft.y < node.y + node.height and node.y < topRight.y
+
+iterator inRangePairs*[T](tree: QuadTree[T], x, y, width, height: int): (QuadTreeIndex, lent T) =
+  let
+    x = clamp(x, 0, tree.width)
+    y = clamp(x, 0, tree.height)
+    width = min(width, tree.width - x + width)
+    height = min(width, tree.height - y + height)
+
+  let
+    topLeftPos = (x, y + height)
+    topRightPos = (x + width, y + height)
+    bottomLeftPos = (x, y)
+    bottomRightPos = (x + width, y)
+
+  var queue {.global.}: seq[int]
+  queue.setLen(0)
+  queue.add [
+    tree.nodes[0].children[tree.quadPos(tree.nodes[0], topLeftPos)],
+    tree.nodes[0].children[tree.quadPos(tree.nodes[0], topRightPos)],
+    tree.nodes[0].children[tree.quadPos(tree.nodes[0], bottomLeftPos)],
+    tree.nodes[0].children[tree.quadPos(tree.nodes[0], bottomRightPos)]
+    ]
+
+  var visited: IntSet
+
+  while queue.len > 0:
+    let
+      ind = queue.pop()
+      node = tree.nodes[ind]
+    if node.overlap(bottomLeftPos, topRightPos) and ind notin visited:
+      case node.kind
+      of Bucket:
+        for (ind, val) in tree.pairs(ind):
+          if contains(bottomLeftPos, topRightPos, (val.x.int, val.y.int)):
+            yield (ind, val)
+      else:
+        for child in node.children:
+          queue.add child
+    visited.incl ind
+
+
+iterator inRange*[T](tree: QuadTree[T], x, y, width, height: int): lent T =
+  for _, val in tree.inRange(x, y, width, height):
+    yield val
+
 
 
 when isMainModule:
