@@ -81,7 +81,7 @@ proc recalculateBuffer*(buffer: var Buffer) =
   if buffer.lines.len == 0:
     buffer.lines.add Line()
   if buffer.useFrameBuffer:
-    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
+    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba, wrapMode = ClampedToBorder)
 
     buffer.useFrameBuffer = true
     buffer.frameBufferSetup = true
@@ -133,9 +133,7 @@ proc getFrameBufferTexture*(buffer: Buffer): lent Texture = buffer.frameBuffer.c
 proc toggleFrameBuffer*(buffer: var Buffer) =
   buffer.useFrameBuffer = not buffer.useFrameBuffer
   if not buffer.framebufferSetup: # TODO: framebuffer.id != 0
-    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba)
-    buffer.frameBuffer.clearColor = color(0, 0, 0, 0)
-    buffer.frameBufferSetup = true
+    buffer.recalculateBuffer()
 
 proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 
