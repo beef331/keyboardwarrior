@@ -27,12 +27,8 @@ uniform float time;
 
 vec2 barrelUv(vec2 uv){
   uv -= 0.5;
-  uv *= pow(length(uv) / 0.5, length(uv) * 0.5);
-  if(abs(uv.x) >= 0.5 || abs(uv.y) >= 0.5){
-    return vec2(0);
-  }
+  uv *= pow(length(uv) / 0.5, length(uv) * 1);
   uv += 0.5;
-
   return uv;
 }
 
