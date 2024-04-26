@@ -8,20 +8,39 @@ uniform vec2 screenSize;
 uniform float time;
 
 
-vec2 barrelUv(vec2 uv){
-  uv = 2.0 * uv - 1.0;
-  float maxBarrelPower = sqrt(5.0);
-  float radius = dot(uv, uv); //faster but doesn't match above accurately
-  uv *= pow(vec2(radius), vec2(0.1));
 
-  return uv * 0.5 + 0.5;
+/*
+  //Center UVs for simple math
+  float2 newUV = i.uv - float2(0.5, 0.5);
+  //Divide by a scale based of length to get curve, 1.5 is hardcoded for scaling edges to fit
+  newUV *= pow(length(newUV) / 0.5,_Fisheye * length(newUV));
+  if(abs(newUV.x) >= 0.5 || abs(newUV.y) >= 0.5)
+  {
+      return 0;
+  }
+  newUV += float2(0.5, 0.5);
+  i.uv = newUV;
+
+
+
+*/
+
+vec2 barrelUv(vec2 uv){
+  uv -= 0.5;
+  uv *= pow(length(uv) / 0.5, length(uv) * 0.5);
+  if(abs(uv.x) >= 0.5 || abs(uv.y) >= 0.5){
+    return vec2(0);
+  }
+  uv += 0.5;
+
+  return uv;
 }
 
 void main() {
   vec2 texSize = textureSize(tex, 0);
-  vec2 screenTexelSize = 2 / screenSize;
+  vec2 screenTexelSize = 4 / screenSize;
   vec2 uv = barrelUv(fUv);
-  float closeness = mod(uv.y, screenTexelSize.y) / screenTexelSize.y;
+  float closeness = mod(fUv.y, screenTexelSize.y) / screenTexelSize.y;
 
   frag_colour = texture(tex, uv) * pow(closeness, 0.2);
 }
