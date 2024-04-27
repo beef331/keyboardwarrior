@@ -27,7 +27,7 @@ type
 
   Glyph* = object
     rune: Rune
-    properties: GlyphProperties
+    properties: uint16 # uin16.high different properties, surely we'll never go that high
 
   Line = object
     glyphs: array[128, Glyph]
@@ -60,6 +60,12 @@ type
     colors: seq[Color]
     colorSsbo: SSBO[seq[Color]]
     colorInd: Table[chroma.Color, int]
+
+    cachedProperties: seq[GlyphProperties] ##
+      ## We cache properties in a seq to keep them sequential and to reuduce size.
+      ## this will need cleared out eventually.
+    propToInd: Table[GlyphProperties, uint16]
+
     time: float32
     properties*: GlyphProperties ## These are for if you do not provide `GlyphProperties`
     noise: OpenSimplex
@@ -153,14 +159,15 @@ proc upload*(buffer: var Buffer, dt: float32) =
       if xPos > buffer.lineWidth:
         break
       let
+        prop = buffer.cachedProperties[int glyph.properties]
         rune =
           if glyph.rune == Rune(0):
             Rune('+')
           else:
             glyph.rune
         entry = buffer.atlas.runeEntry(rune)
-        theFg = buffer.getColorIndex(glyph.properties.foreground)
-        theBg = buffer.getColorIndex(glyph.properties.background)
+        theFg = buffer.getColorIndex(prop.foreground)
+        theBg = buffer.getColorIndex(prop.background)
         size =
           if entry.rect.w == 0:
             buffer.atlas.runeEntry(Rune('+')).rect.wh / scrSize
@@ -168,10 +175,10 @@ proc upload*(buffer: var Buffer, dt: float32) =
             entry.rect.wh / scrSize
 
       let
-        sineOffset = sin((buffer.time + x) * glyph.properties.sineSpeed) * glyph.properties.sineStrength * size.y
-        shakeOffsetX = buffer.noise.evaluate((buffer.time + x * ind.float) * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.x
-        shakeOffsetY = buffer.noise.evaluate((buffer.time + y * ind.float) * glyph.properties.shakeSpeed, float32 ind) * glyph.properties.shakeStrength * size.y
-      if glyph.properties.blinkSpeed == 0 or round(buffer.time * glyph.properties.blinkSpeed).int mod 2 != 0:
+        sineOffset = sin((buffer.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
+        shakeOffsetX = buffer.noise.evaluate((buffer.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
+        shakeOffsetY = buffer.noise.evaluate((buffer.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
+      if (prop.blinkSpeed == 0 or round(buffer.time * prop.blinkSpeed).int mod 2 != 0) and glyph.rune != Rune(0):
         rendered = true
         let
           whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
@@ -259,7 +266,11 @@ proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
       buff.cursorX = 0
       inc buff.cursorY
     elif buff.cursorX < buff.lineWidth:
-      buff.lines[buff.cursorY].glyphs[buff.cursorX] = Glyph(rune: rune, properties: props)
+      let ind = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+      if ind == uint16 buff.cachedProperties.len:
+        buff.propToInd[props] = ind
+        buff.cachedProperties.add props
+      buff.lines[buff.cursorY].glyphs[buff.cursorX] = Glyph(rune: rune, properties: ind)
       inc buff.cursorX
 
   if buff.cursorY - buff.cameraPos >= buff.lineHeight:
