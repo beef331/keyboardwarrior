@@ -1,6 +1,7 @@
 import pkg/truss3D/[models, shaders, inputs, fontatlaser, instancemodels, textures]
 import pkg/[vmath, truss3D, pixie, opensimplexnoise, chroma, opengl]
 import std/[unicode, tables, strutils, enumerate, math]
+from std/os import `/`
 export chroma
 
 type
@@ -77,8 +78,9 @@ proc pixelHeight*(buffer: Buffer): int = buffer.pixelHeight
 proc pixelWidth*(buffer: Buffer): int = buffer.pixelWidth
 
 const
-  guiVert = ShaderPath"text.vert.glsl"
-  guiFrag = ShaderPath"text.frag.glsl"
+  relativeTextShaderPath {.strDefine.} = ""
+  guiVert = ShaderPath relativeTextShaderPath / "text.vert.glsl"
+  guiFrag = ShaderPath relativeTextShaderPath / "text.frag.glsl"
 
 proc recalculateBuffer*(buffer: var Buffer) =
   let charEntry = buffer.atlas.runeEntry(Rune('W'))
@@ -304,7 +306,7 @@ when isMainModule:
   const clear = color(0, 0, 0, 0)
   var
     buffer = Buffer(lineWidth: 40, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
-    fontPath = "PublicPixel.ttf"
+    fontPath = "../PublicPixel.ttf"
 
   proc init =
     buffer.initResources(fontPath)
