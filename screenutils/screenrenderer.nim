@@ -174,22 +174,24 @@ proc upload*(buffer: var Buffer, dt: float32) =
           else:
             entry.rect.wh / scrSize
 
-      let
-        sineOffset = sin((buffer.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
-        shakeOffsetX = buffer.noise.evaluate((buffer.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
-        shakeOffsetY = buffer.noise.evaluate((buffer.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
       if (prop.blinkSpeed == 0 or round(buffer.time * prop.blinkSpeed).int mod 2 != 0) and glyph.rune != Rune(0):
+        let
+          sineOffset = sin((buffer.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
+          shakeOffsetX = buffer.noise.evaluate((buffer.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
+          shakeOffsetY = buffer.noise.evaluate((buffer.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
         rendered = true
         let
           whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
           id = entry.id.uint32 or whiteSpaceBit
         buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: id , matrix: translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
+
       if rune == Rune('\n'):
         break
       elif rune.isWhiteSpace:
         x += buffer.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
       else:
         x += size.x
+
     y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
     x = -1f
 
