@@ -155,7 +155,7 @@ proc upload*(buffer: var Buffer, dt: float32) =
       let
         rune =
           if glyph.rune == Rune(0):
-            Rune(' ')
+            Rune('+')
           else:
             glyph.rune
         entry = buffer.atlas.runeEntry(rune)

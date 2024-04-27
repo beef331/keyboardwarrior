@@ -32,9 +32,9 @@ type
     name*: string
     faction*: Faction
     node: int
-    x*, y*: float
-    velocity*: float
-    heading: float
+    x*, y*: float32
+    velocity*: float32
+    heading: float32
     kind: EntityKind
     compartments: seq[Compartment]
 

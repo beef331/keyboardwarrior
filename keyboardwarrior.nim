@@ -32,6 +32,7 @@ proc init =
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
+
 proc update(dt: float32) =
   gamestate.update(dt)
   time += dt
@@ -41,9 +42,10 @@ proc update(dt: float32) =
     screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
     shaderModificationTime = currModTime
 
-
 proc draw() =
+
   gamestate.buffer.render()
+
   let
     scrSize = screenSize().vec2
     scale = min(scrSize.x / gameState.buffer.lineWidth.float32, scrSize.y / gameState.buffer.lineHeight.float32)

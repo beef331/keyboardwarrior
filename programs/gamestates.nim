@@ -108,7 +108,7 @@ proc init*(_: typedesc[GameState]): GameState =
   for command in programutils.commands():
     result.add command
 
-  result.buffer = Buffer(lineWidth: 80, lineHeight: 30, properties: GlyphProperties(foreground: parseHtmlColor("White")))
+  result.buffer = Buffer(lineWidth: 60, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   result.buffer.initResources("PublicPixel.ttf", true)
   if not result.world.isReady:
     result.buffer.put "Shall we play a game?\n"
@@ -184,6 +184,14 @@ proc update*(gameState: var GameState, dt: float) =
       if KeyCodeEscape.isDown:
         gameState.buffer.put ">"
         gameState.activeProgram = ""
+
+  let
+    curPos = gamestate.buffer.getPosition()
+    chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
+
+  gameState.buffer.setPosition(gameState.buffer.lineWidth - chars.len, gameState.buffer.cameraPos)
+  gameState.buffer.put(chars)
+  gameState.buffer.setPosition(curPos[0], curPos[1])
 
   gameState.buffer.upload(dt)
   setInputText("")
