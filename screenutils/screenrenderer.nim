@@ -202,7 +202,6 @@ proc upload*(buffer: var Buffer, dt: float32) =
     buffer.fontTarget.model.reuploadSsbo()
   buffer.frameBuffer.clearColor = buffer.properties.background
 
-
 proc render*(buffer: Buffer) =
   var old: (Glint, Glint, GlSizeI, GlSizeI)
   if buffer.useFrameBuffer:
@@ -251,9 +250,6 @@ proc clearTo*(buff: var Buffer, x, y: int) =
   buff.lines.setLen(y + 1)
   buff.cursorX = x
 
-proc getPosition*(buff: var Buffer): (int, int) =
-  (buff.cursorX, buff.cursorY)
-
 proc newLine*(buff: var Buffer) =
   buff.lines.add Line()
   inc buff.cursorY
@@ -261,11 +257,30 @@ proc newLine*(buff: var Buffer) =
   if buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
-proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
+iterator chr*(s: string): Rune =
+  for rune in s.runes:
+    yield rune
+
+iterator chr*(s: openarray[Glyph]): Glyph =
+  for glyph in s.items:
+    yield glyph
+
+proc isNewLine(rune: Rune): bool = rune == Rune '\n'
+proc isNewLine(glyph: Glyph): bool = glyph.rune.isNewLine()
+
+
+proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false): auto =
+  when getBuffer:
+    result = newSeq[Glyph]()
+
   if buff.lines.len == 0:
     buff.lines.add Line()
-  for rune in s.runes:
-    if rune == Rune '\n':
+
+  for rune in s.chr:
+    when getBuffer:
+      result.add buff.lines[buff.cursorY].glyphs[buff.cursorX]
+
+    if rune.isNewLine():
       buff.lines.add Line()
       buff.cursorX = 0
       inc buff.cursorY
@@ -274,14 +289,29 @@ proc put*(buff: var Buffer, s: string, props: GlyphProperties) =
       if ind == uint16 buff.cachedProperties.len:
         buff.propToInd[props] = ind
         buff.cachedProperties.add props
-      buff.lines[buff.cursorY].glyphs[buff.cursorX] = Glyph(rune: rune, properties: ind)
+
+      buff.lines[buff.cursorY].glyphs[buff.cursorX] =
+        when rune is Rune:
+          Glyph(rune: rune, properties: ind)
+        else:
+          rune
+
       inc buff.cursorX
 
-  if buff.cursorY - buff.cameraPos >= buff.lineHeight:
+  if moveCamera and buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
-proc put*(buff: var Buffer, s: string) =
-  put buff, s, buff.properties
+proc put*(buff: var Buffer, s: string, moveCamera = true) =
+  put buff, s, buff.properties, moveCamera
+
+proc put*(buff: var Buffer, s: seq[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false) = # `seq[Glyph]` != openArray
+  buff.put(s.toOpenArray(0, s.high), props, moveCamera, getBuffer)
+
+proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true) =
+  put buff, s, buff.properties, moveCamera
+
+proc fetchAndPut*(buff: var Buffer, s: string, moveCamera = true): seq[Glyph] =
+  put buff, s, buff.properties, moveCamera, true
 
 proc scrollUp*(buff: var Buffer) =
   buff.cameraPos = max(buff.cameraPos - 1, 0)
@@ -298,9 +328,20 @@ proc toTop*(buffer: var Buffer) =
 proc toBottom*(buffer: var Buffer) =
   buffer.cameraPos = buffer.lines.high
 
+proc getPosition*(buff: var Buffer): (int, int) =
+  (buff.cursorX, buff.cursorY)
+
 proc setPosition*(buffer: var Buffer, x, y: int) =
   (buffer.cursorX, buffer.cursorY) = (x, y)
   buffer.lines.setLen(max(y + 1, buffer.lines.len))
+
+template withPos*(buffer: var Buffer, x, y: int, body: untyped) =
+  ## This moves the buffer then returns it back to it's previous position
+  let pos = buffer.getPosition()
+  buffer.setPosition(x, y)
+  body
+  buffer.setPosition(pos[0], pos[1])
+
 
 when isMainModule:
   const clear = color(0, 0, 0, 0)

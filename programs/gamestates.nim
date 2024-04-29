@@ -26,10 +26,16 @@ proc hash(str: InsensitiveString): Hash =
 proc insStr*(s: sink string): InsensitiveString = InsensitiveString(s)
 
 type
+  ProgramFlag* = enum
+    Blocking ## For things like manpage, no need to clear just do not print `> ...` next
+
+  ProgramFlags* = set[ProgramFlag]
+
   Program* = distinct tuple[
     onExit: proc(_: var Atom, gameState: var GameState) {.nimcall.},
     update: proc(_: var Atom, gameState: var GameState, dt: float32, active: bool) {.nimcall.},
-    name: proc(_: Atom): string {.nimcall.}
+    name: proc(_: Atom): string {.nimcall.},
+    getFlags: proc(_: Atom): set[ProgramFlag] {.nimcall.}
   ]
   CommandHandler* = proc(gamestate: var Gamestate, input: string)
 
@@ -48,6 +54,10 @@ type
     programX: int
     programY: int
     world*: World
+
+
+    fpsX, fpsY: int # Where we write to
+    lastFpsBuffer: seq[Glyph]
 
 implTrait Program
 
@@ -130,8 +140,18 @@ proc dispatchCommand(gameState: var GameState) =
       gameState.writeError("Incorrect command\n")
   gameState.input = ""
 
+proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""
+proc currentProgramFlags(gameState: GameState): ProgramFlags =
+  if gameState.inProgram:
+    gameState.programs[gameState.activeProgram].getFlags()
+  else:
+    {}
+
 
 proc update*(gameState: var GameState, dt: float) =
+  gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
+    gameState.buffer.put gameState.lastFpsBuffer
+
 
   if not gamestate.world.isReady:
     if inputText().len > 0:
@@ -155,16 +175,19 @@ proc update*(gameState: var GameState, dt: float) =
       if key != gameState.activeProgram:
         program.update(gamestate, dt, false)
 
-    if gamestate.activeProgram == "":
-      if isTextInputActive():
+    if not gamestate.inProgram or Blocking in gamestate.currentProgramFlags:
+      if isTextInputActive() and gameState.currentProgramFlags() == {}:
         if inputText().len > 0:
           gameState.input.add inputText()
           gameState.buffer.clearLine()
           gameState.buffer.put(">" & gameState.input)
+
         if KeyCodeReturn.isDownRepeating():
           gameState.buffer.newLine()
           gameState.dispatchCommand()
-          gameState.buffer.put(">")
+          if not gameState.inProgram: # We didnt enter a program
+            gameState.buffer.put(">")
+
         if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
           gameState.input.setLen(gameState.input.high)
           gameState.buffer.clearLine()
@@ -180,18 +203,19 @@ proc update*(gameState: var GameState, dt: float) =
       gameState.buffer.cameraPos = gameState.programY
       gameState.programs[gameState.activeProgram].update(gamestate, dt, true)
 
-
+    if gameState.inProgram:
       if KeyCodeEscape.isDown:
         gameState.buffer.put ">"
         gameState.activeProgram = ""
 
-  let
-    curPos = gamestate.buffer.getPosition()
-    chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
 
-  gameState.buffer.setPosition(gameState.buffer.lineWidth - chars.len, gameState.buffer.cameraPos)
-  gameState.buffer.put(chars)
-  gameState.buffer.setPosition(curPos[0], curPos[1])
+  let chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
+  gamestate.fpsX = gameState.buffer.lineWidth - chars.len
+  gamestate.fpsY = gameState.buffer.cameraPos
+
+
+  gameState.buffer.withPos(gameState.fpsX, gamestate.fpsY):
+    gameState.lastFpsBuffer = gameState.buffer.fetchAndPut(chars, false)
 
   gameState.buffer.upload(dt)
   setInputText("")

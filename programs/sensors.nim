@@ -20,6 +20,7 @@ type
 
 proc name(sensor: Sensor): string = "Sensor"
 proc onExit(sensor: var Sensor, gameState: var GameState) = discard
+proc getFlags(_: Sensor): ProgramFlags = {}
 
 proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: bool) =
   if active:

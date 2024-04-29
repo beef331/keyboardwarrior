@@ -122,6 +122,9 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
 
 proc onExit*(hw: var HardwareHack, gameState: GameState) = discard
 proc name*(hw: HardwareHack): string = hw.name
+proc getFlags(_: HardwareHack): ProgramFlags = {}
+
+
 
 proc hhs(gamestate: var GameState, input: string) =
   if gameState.hasProgram("hhs"):

@@ -31,6 +31,7 @@ for i in 0..59:
 
 proc name(shop: Shop): string = "Shop"
 proc onExit(shop: var Shop, gameState: var GameState) = discard
+proc getFlags(_: Shop): ProgramFlags = {}
 
 proc update(shop: var Shop, gameState: var GameState, dt: float32, active: bool) =
   if active:

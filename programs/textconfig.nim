@@ -70,7 +70,7 @@ command(
 <p foreground = "#aaaaaa">`text propertyName value`</p>
 <br/><br/>
 Sets terminal properties.<br/>
-It has a variety of commands ranging from line width to shaking.<br/>
+It has a variety of commands ranging from line width <br/> to shaking.<br/>
 <br/><br/>
 <p foreground = "#aaaaaa">`text font fontName`</p><br/>
 Sets the font to the given font name.<br/>
