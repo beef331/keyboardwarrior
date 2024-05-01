@@ -1,7 +1,7 @@
 import ../screenutils/screenrenderer
 import ../data/spaceentity
 import pkg/[traitor, chroma, pixie]
-import std/[tables, strutils, hashes]
+import std/[tables, strutils, hashes, random]
 import pkg/truss3D/inputs
 
 export screenrenderer, chroma, pixie
@@ -47,6 +47,11 @@ type
 
   GameState* = object
     buffer*: Buffer
+
+    shipStack: seq[string] ## Stack of names for which ship is presently controlled
+      ## [^1] is active
+      ## [0] is the player's
+
     programs: Table[string, Traitor[Program]]
     activeProgram: string
     handlers: Table[InsensitiveString, Command]
@@ -68,20 +73,49 @@ iterator commands*(gameState: GameState): Command =
 proc writeError*(gameState: var GameState, msg: string) =
   gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
 
+proc activeShip*(gameState: GameState): lent string = gameState.shipStack[gameState.shipStack.high]
+
+proc activeShipEntity*(gameState: GameState): lent SpaceEntity =
+  gameState.world.getEntity(gameState.activeShip)
+
+proc activeShipEntity*(gameState: var GameState): var SpaceEntity =
+  gameState.world.getEntity(gameState.activeShip)
+
 proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
   (gameState.programX, gameState.programY) = gamestate.buffer.getPosition()
   gameState.buffer.clearTo(gameState.programY)
-  gameState.activeProgram = program.name()
-  if program.name notin gameState.programs:
-    gameState.programs[program.name()] = program
+
+  let programName = gameState.activeShip & program.name()
+  gameState.activeProgram = programName
+
+  if programName notin gameState.programs:
+    gameState.programs[programName] = program
 
 proc enterProgram*(gameState: var GameState, program: sink string) =
+  let programName = gameState.activeShip & program
   gameState.activeProgram = program
+
+proc exitProgram*(gameState: var GameState) =
+  gameState.activeProgram = ""
+  gameState.buffer.put ">"
 
 proc hasProgram*(gameState: var GameState, name: string): bool = name in gameState.programs
 
 proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.handlers
 proc getCommand*(gameState: var GameState, name: string): lent Command = gameState.handlers[InsensitiveString(name)]
+
+
+proc entityExists*(gameState: var GameState, name: string): bool =
+  gameState.world.entityExists(name)
+
+proc takeControlOf*(gameState: var GameState, name: string): bool =
+  ## takes control of a ship returning true if it can be found and connected to
+  result = gameState.world.entityExists(name) and name notin gameState.shipStack # O(N) Send help!
+  if result:
+    gameState.shipStack.add name
+    gameState.buffer.properties = gameState.activeShipEntity.glyphProperties
+
+proc randState*(gameState: var GameState): var Rand = gameState.world.randState
 
 import programutils
 export programutils
@@ -102,11 +136,29 @@ proc init*(_: typedesc[GameState]): GameState =
 
   result.add Command(
     name: "debug",
-    help: "This toggles 3D view on and off",
+    help: "Prints lines for debugging the buffer",
     handler: proc(gameState: var GameState, _: string) =
       for i in 1..gameState.buffer.lineHeight:
         gameState.buffer.put $i & repeat("=", gameState.buffer.lineWidth)
         gameState.buffer.newLine()
+  )
+
+  result.add Command(
+    name: "exit",
+    help: "Exits the currently controlled ship\n\tif there not controlling the player ship.",
+    handler: proc(gameState: var GameState, input: string) =
+      if input == "player":
+        gameState.shipStack.setLen(1)
+      elif gameState.shipStack.len > 1:
+        gameState.buffer.put("Exited: " & gameState.activeShip & "\n")
+        gameState.shipStack.setLen(gameState.shipStack.high)
+      else:
+        gameState.buffer.put("Where do you want to go,")
+        gameState.buffer.put("SPACE?\n", GlyphProperties(
+          foreground: gameState.buffer.properties.foreground,
+          background: gameState.buffer.properties.background,
+          shakeStrength: 0.1, shakeSpeed: 30)
+        )
   )
 
   result.add Command(
@@ -149,6 +201,14 @@ proc currentProgramFlags(gameState: GameState): ProgramFlags =
 
 
 proc update*(gameState: var GameState, dt: float) =
+  let
+    props = gameState.buffer.properties
+    startCount = gameState.shipStack.len
+
+  if gameState.shipStack.len > 0:
+    gameState.buffer.properties = gameState.activeShipEntity.glyphProperties
+
+
   gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
     gameState.buffer.put gameState.lastFpsBuffer
 
@@ -159,7 +219,8 @@ proc update*(gameState: var GameState, dt: float) =
       gameState.buffer.clearLine()
       gameState.buffer.put(gameState.input)
     if KeyCodeReturn.isDownRepeating():
-      gameState.world.init(gameState.input, "") # TODO: Take a seed aswell
+      gameState.shipStack.add gameState.input
+      gameState.world.init(gameState.input, gameState.input) # TODO: Take a seed aswell
       gameState.input.setLen(0)
       gameState.buffer.clearTo(0)
       gameState.buffer.put ">"
@@ -205,8 +266,7 @@ proc update*(gameState: var GameState, dt: float) =
 
     if gameState.inProgram:
       if KeyCodeEscape.isDown:
-        gameState.buffer.put ">"
-        gameState.activeProgram = ""
+        gameState.exitProgram()
 
 
   let chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
@@ -220,5 +280,8 @@ proc update*(gameState: var GameState, dt: float) =
   gameState.buffer.upload(dt)
   setInputText("")
 
+  if gameState.shipStack.len > 0 and startCount == gameState.shipStack.len:
+    gameState.activeShipEntity.glyphProperties = gameState.buffer.properties
 
+  gameState.buffer.properties = props
 

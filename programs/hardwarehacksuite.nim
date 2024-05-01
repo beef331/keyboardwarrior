@@ -1,6 +1,6 @@
 import ../screenutils/texttables
 import pkg/truss3D/inputs
-import std/[algorithm, strutils, math, random, sets]
+import std/[algorithm, strutils, math, random, sets, strutils]
 import gamestates
 
 type
@@ -65,9 +65,9 @@ proc put*(buffer: var Buffer, hwHack: HardwareHack) =
   buffer.printTable(hwHack.guesses, entryProperties = entryProps)
   if hwHack.isHacking:
     buffer.put "["
-    let progress = int (hwHack.hackTime / hwHack.timeToHack) * 10
+    let progress = int hwHack.hackTime / hwHack.timeToHack * (buffer.lineWidth.float32 - 2)
     buffer.put "=".repeat(progress)
-    buffer.put " ".repeat(10 - progress)
+    buffer.put " ".repeat(buffer.lineWidth - 2 - progress)
     buffer.put "]"
 
   if not hwHack.isHacking:
@@ -118,23 +118,33 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
       hwHack.currentGuess.timeToDeny = int(hwHack.timeToHack)
 
   if active:
+    for guess in hwHack.guesses:
+      if guess.guessed and hwHack.currentGuess.timeToDeny == hwHack.actualPassword.len:
+        assert gameState.takeControlOf(hwHack.target)
+        gameState.buffer.put("Hacked into: " & hwHack.target & "\n")
+        gameState.exitProgram()
+        return
+
+
     gameState.buffer.put(hwHack)
 
 proc onExit*(hw: var HardwareHack, gameState: GameState) = discard
-proc name*(hw: HardwareHack): string = hw.name
+proc name*(hw: HardwareHack): string = hw.name & hw.target
 proc getFlags(_: HardwareHack): ProgramFlags = {}
 
 
 
 proc hhs(gamestate: var GameState, input: string) =
-  if gameState.hasProgram("hhs"):
-    gameState.enterProgram("hhs")
-  else:
-    randomize()
+  let input = input.strip()
+  if gameState.hasProgram("hhs" & input):
+    gameState.enterProgram("hhs" & input)
+  elif gameState.entityExists(input):
     var password = newString(5)
     for ch in password.mitems:
-      ch = sample(Digits + Letters)
-    gameState.enterProgram(HardwareHack.init(20, rand(0..10), "Orion", password, 3).toTrait(Program))
+      ch = gameState.randState.sample(Digits + Letters)
+    gameState.enterProgram(HardwareHack.init(20, gameState.randState.rand(0..10), input, password, 3).toTrait(Program))
+  else:
+    gameState.writeError("Cannot find any entity named: '" & input & "'.\n")
 
 command(
   "hhs",

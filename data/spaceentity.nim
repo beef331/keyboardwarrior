@@ -1,4 +1,5 @@
 import std/[tables, random, hashes, sysrand, math]
+import ../screenutils/screenrenderer
 import quadtrees
 
 type
@@ -92,6 +93,7 @@ type
     velocity*: float32
     maxSpeed*: float32
     heading: float32
+    glyphProperties*: GlyphProperties
     case kind: EntityKind
     of Ship, Station:
       systems: seq[System]
@@ -109,15 +111,14 @@ type
     player: QuadTreeIndex
     playerName: string # GUID no other ship can use this
     seed: int # Start seed to allow reloading state from chunks
-    randState: Rand
-    activeChunks: seq[Chunk] # Load N number of chunks around player
+    randState*: Rand
+    activeChunk: Chunk
 
 proc canHack*(spaceEntity: SpaceEntity): bool =
   if spaceEntity.kind in {Ship, Station}:
     for sys in spaceEntity.systems:
       if sys.kind == Hacker and Powered in sys.flags:
         return true
-
 
 proc isReady*(world: World): bool = world.playerName.len != 0
 
@@ -142,23 +143,27 @@ proc init*(world: var World, playerName, seed: string) =
       systems: @[
         System(kind: Sensor, sensorRange: 100),
         System(kind: Hacker, hackSpeed: 1, hackRange: 100)
-      ]
+      ],
+      glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black"))
     )
-  world.activeChunks.add Chunk(entities: qt, nameToEntityInd: {playerName: world.player}.toTable())
+  world.activeChunk = Chunk(entities: qt, nameToEntityInd: {playerName: world.player}.toTable())
 
   const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
 
   for _ in 0..1000:
     let
       selectedName = world.randState.sample(entityNames)
-      name = selectedName & $world.activeChunks[0].nameCount.getOrDefault(selectedName)
+      name = selectedName & $world.activeChunk.nameCount.getOrDefault(selectedName)
       x = world.randState.rand(100d..900d)
       y =  world.randState.rand(100d..900d)
       vel =  world.randState.rand(1d..5d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
+      props = GlyphProperties(
+        foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
+      )
 
-    world.activeChunks[0].nameToEntityInd[name] = world.activeChunks[0].entities.add SpaceEntity(
+    world.activeChunk.nameToEntityInd[name] = world.activeChunk.entities.add SpaceEntity(
       kind: if selectedName == entityNames[1]: Asteroid else: Ship,
       name: name,
       x: x,
@@ -166,25 +171,34 @@ proc init*(world: var World, playerName, seed: string) =
       velocity: vel,
       maxSpeed: rand(vel .. 5d),
       faction: faction,
-      heading: heading
-      )
-    inc world.activeChunks[0].nameCount, selectedName
+      heading: heading,
+      glyphProperties: props
+    )
+    inc world.activeChunk.nameCount, selectedName
 
 proc update*(world: var World, dt: float32) =
-  for entity in world.activeChunks[0].entities.mitems:
+  for entity in world.activeChunk.entities.mitems:
     let
       xOffset = cos(entity.heading)
       yOffset = sin(entity.heading)
     entity.x += dt * entity.velocity * xOffset
     entity.y += dt * entity.velocity * yOffset
 
-  for toMove in world.activeChunks[0].entities.reposition():
+  for toMove in world.activeChunk.entities.reposition():
     discard toMove # TODO: Move this to the next chunk
 
 iterator nonPlayerEntities*(world: World): lent SpaceEntity =
-  for i, ent in world.activeChunks[0].entities.inRangePairs(450, 450, 100, 100):
+  for i, ent in world.activeChunk.entities.inRangePairs(450, 450, 100, 100):
     if i != world.player:
       yield ent
 
 proc player*(world: World): lent SpaceEntity =
-  world.activeChunks[0].entities[world.player]
+  world.activeChunk.entities[world.player]
+
+proc getEntity*(world: World, name: string): lent SpaceEntity =
+  world.activeChunk.entities[world.activeChunk.nameToEntityInd[name]]
+
+proc getEntity*(world: var World, name: string): var SpaceEntity =
+  world.activeChunk.entities[world.activeChunk.nameToEntityInd[name]]
+
+proc entityExists*(world: World, name: string): bool = name in world.activeChunk.nameToEntityInd
