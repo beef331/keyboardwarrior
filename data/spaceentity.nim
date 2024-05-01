@@ -3,17 +3,17 @@ import ../screenutils/screenrenderer
 import quadtrees
 
 type
-  InventoryEntry = object
-    name: string
-    count: int
-    cost: int
-    weight: int
+  InventoryEntry* = object
+    name*: string
+    count*: int
+    cost*: int
+    weight*: int
 
-  Compartment = object
-    inventory: seq[InventoryEntry]
-    maxLoad: int
+  Compartment* = object
+    inventory*: seq[InventoryEntry]
+    maxLoad*: int
 
-  EntityKind = enum
+  EntityKind* = enum
     Asteroid
     Projectile
     Ship
@@ -28,10 +28,10 @@ type
     Jiborn
     #Custom = 16
 
-  SystemKind = enum
+  SystemKind* = enum
     Sensor
-    WeaponBay # Turrets, Missiles bays, ...
-    ToolBay # Drills, welders, ...
+    WeaponBay ## Turrets, Missiles bays, ...
+    ToolBay ## Drills, welders, ...
     Thruster
     Shield
     Nanites
@@ -39,51 +39,54 @@ type
     AutoTargetting
     Hacker
     Room
+    Generator ## Generates power
 
-  WeaponKind = enum
+  WeaponKind* = enum
     Bullet
     Guass
     RocketVolley
     Missile
     Nuke
 
-  ToolKind = enum
+  ToolKind* = enum
     Drill
     Welder
 
-  SystemFlag = enum
+  SystemFlag* = enum
     Powered
     Jammed
 
-  System = object
-    name: string
-    powerUsage: int
-    flags: set[SystemFlag]
-    case kind: SystemKind
+  System* = object
+    name*: string
+    powerUsage*: int # Generated when a generator
+    flags*: set[SystemFlag]
+    case kind*: SystemKind
     of Sensor:
-      sensorRange: int
+      sensorRange*: int
     of WeaponBay:
-      weaponTarget: string
-      weaponkind: WeaponKind
-      maxAmmo: int
-      currentAmmo: int
+      weaponTarget*: string
+      weaponkind*: WeaponKind
+      maxAmmo*: int
+      currentAmmo*: int
     of ToolBay:
-      toolTarget: string # Use node id instead?
+      toolTarget*: string # Use node id instead?
     of Shield, Nanites:
-      currentShield, maxShield: int
-      regenRate: int
+      currentShield*, maxShield*: int
+      regenRate*: int
     of Thruster:
-      acceleration: float32
-      maxSpeed: float32
+      acceleration*: float32
+      maxSpeed*: float32
     of AutoLoader:
       discard
     of AutoTargetting:
-      autoTarget: string
+      autoTarget*: string
     of Hacker:
-      hackSpeed: int
-      hackRange: int
+      hackSpeed*: int
+      hackRange*: int
     of Room:
-      inventory: Compartment
+      inventory*: Compartment
+    of Generator:
+      discard
 
   SpaceEntity* = object
     node: int # For the tree
@@ -96,7 +99,7 @@ type
     glyphProperties*: GlyphProperties
     case kind: EntityKind
     of Ship, Station:
-      systems: seq[System]
+      systems*: seq[System]
     of Asteroid:
       resources: seq[InventoryEntry]
     of Projectile:
@@ -113,6 +116,8 @@ type
     seed: int # Start seed to allow reloading state from chunks
     randState*: Rand
     activeChunk: Chunk
+
+  NotSystem* = distinct set[SystemKind]
 
 proc canHack*(spaceEntity: SpaceEntity): bool =
   if spaceEntity.kind in {Ship, Station}:
@@ -141,8 +146,8 @@ proc init*(world: var World, playerName, seed: string) =
       y: 500,
       maxSpeed: 3,
       systems: @[
-        System(kind: Sensor, sensorRange: 100),
-        System(kind: Hacker, hackSpeed: 1, hackRange: 100)
+        System(name: "Sensor Array", kind: Sensor, sensorRange: 100),
+        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100)
       ],
       glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black"))
     )
@@ -202,3 +207,31 @@ proc getEntity*(world: var World, name: string): var SpaceEntity =
   world.activeChunk.entities[world.activeChunk.nameToEntityInd[name]]
 
 proc entityExists*(world: World, name: string): bool = name in world.activeChunk.nameToEntityInd
+
+iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
+  for system in entity.systems:
+    when filter is NotSystem:
+      if system.kind notin filter.set[:SystemKind]:
+        yield system
+    else:
+      if system.kind in filter:
+        yield system
+
+iterator poweredSystems*(entity: SpaceEntity): lent System =
+  for system in entity.systems:
+    if Powered in system.flags:
+      yield system
+
+iterator unpoweredSystems*(entity: SpaceEntity): lent System =
+  for system in entity.systems:
+    if Powered notin system.flags:
+      yield system
+
+proc generatedPower*(entity: SpaceEntity): int =
+  for generator in entity.systemsOf({Generator}):
+    result.inc generator.powerUsage
+
+proc consumedPower*(entity: SpaceEntity): int =
+  for consumer in entity.systemsOf(NotSystem {Generator}):
+    if Powered in consumer.flags:
+      result.inc consumer.powerUsage
