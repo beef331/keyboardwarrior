@@ -1,5 +1,5 @@
 import std/private/asciitables
-import std/[parseutils, strutils, options, macros, sequtils]
+import std/[parseutils, strutils, options, macros, sequtils, unicode, strbasics]
 import screenrenderer
 
 proc paramCount(T: typedesc[object or tuple]): int =
@@ -22,6 +22,23 @@ template tableName*(s: string){.pragma.}
 template tableAlign*(_: AlignFunction){.pragma.}
 template tableStringify*(p: proc {.nimcall.}){.pragma.}
 
+proc toPrintedName(name: string): string =
+  let firstCap = name.find({'A'..'Z'})
+  if firstCap != -1:
+    result = name.toOpenArray(0, firstCap - 1).capitalize()
+  else:
+    result = name.capitalize()
+
+  var nd = firstCap
+  while firstCap >= 0 and nd < name.high:
+    var newInd = name.find({'A'..'Z'}, nd + 1)
+    if newInd == -1:
+      newInd = name.len
+
+    result.add " "
+    result.add name.toOpenArray(nd, newInd - 1)
+    nd = newInd
+
 iterator tableEntries*[T](
   values: openArray[T],
   defaultProperties, headerProperties: GlyphProperties,
@@ -38,7 +55,8 @@ iterator tableEntries*[T](
       when field.hasCustomPragma(tableName):
         field.getCustomPragmaVal(tableName)
       else:
-        name
+        const val = static: name.toPrintedName()
+        val
 
     when field.hasCustomPragma(tableAlign):
       alignFunctions[fieldInd] = field.getCustomPragmaVal(tableAlign)

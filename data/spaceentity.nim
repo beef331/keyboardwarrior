@@ -59,7 +59,7 @@ type
   System* = object
     name*: string
     powerUsage*: int # Generated when a generator
-    flags*: set[SystemFlag]
+    flags*: set[SystemFlag] = {Powered}
     case kind*: SystemKind
     of Sensor:
       sensorRange*: int
@@ -146,8 +146,9 @@ proc init*(world: var World, playerName, seed: string) =
       y: 500,
       maxSpeed: 3,
       systems: @[
-        System(name: "Sensor Array", kind: Sensor, sensorRange: 100),
-        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100)
+        System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
+        System(name: "Warp Core", kind: Generator, powerUsage: 300),
       ],
       glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black"))
     )
@@ -168,7 +169,7 @@ proc init*(world: var World, playerName, seed: string) =
         foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
       )
 
-    world.activeChunk.nameToEntityInd[name] = world.activeChunk.entities.add SpaceEntity(
+    var ent = SpaceEntity(
       kind: if selectedName == entityNames[1]: Asteroid else: Ship,
       name: name,
       x: x,
@@ -177,8 +178,22 @@ proc init*(world: var World, playerName, seed: string) =
       maxSpeed: rand(vel .. 5d),
       faction: faction,
       heading: heading,
-      glyphProperties: props
+      glyphProperties: props,
     )
+
+
+
+    if ent.kind in {Ship, Station}:
+      ent.systems = @[
+        System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
+        System(name: "Warp Core", kind: Generator, powerUsage: 300),
+      ]
+
+    world.activeChunk.nameToEntityInd[name] = world.activeChunk.entities.add ent
+
+
+
     inc world.activeChunk.nameCount, selectedName
 
 proc update*(world: var World, dt: float32) =

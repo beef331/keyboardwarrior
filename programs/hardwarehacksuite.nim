@@ -5,10 +5,10 @@ import gamestates
 
 type
   HackGuess = object
-    id {.tableName: "Id".}: int
-    password {.tableName: "Password".}: string
-    timeToDeny {.tableName:"Time To Deny".}: int
-    guessed {.tableName: "Guessed".}: bool
+    id: int
+    password: string
+    timeToDeny: int
+    guessed: bool
 
   HardwareHack* = object
     name: string
