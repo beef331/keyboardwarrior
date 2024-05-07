@@ -97,7 +97,7 @@ type
     maxSpeed*: float32
     heading: float32
     glyphProperties*: GlyphProperties
-    case kind: EntityKind
+    case kind*: EntityKind
     of Ship, Station:
       systems*: seq[System]
     of Asteroid:
@@ -175,7 +175,7 @@ proc init*(world: var World, playerName, seed: string) =
       x: x,
       y: y,
       velocity: vel,
-      maxSpeed: rand(vel .. 5d),
+      maxSpeed: world.randState.rand(vel .. 5d),
       faction: faction,
       heading: heading,
       glyphProperties: props,
@@ -184,9 +184,15 @@ proc init*(world: var World, playerName, seed: string) =
 
 
     if ent.kind in {Ship, Station}:
+      let powered =
+        if world.randState.rand(0..100) > 20:
+          {Powered}
+        else:
+          {}
+
       ent.systems = @[
         System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
-        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
+        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
         System(name: "Warp Core", kind: Generator, powerUsage: 300),
       ]
 
@@ -232,6 +238,16 @@ iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): l
       if system.kind in filter:
         yield system
 
+iterator poweredSystemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
+  for system in entity.systems:
+    if Powered in system.flags:
+      when filter is NotSystem:
+        if system.kind notin filter.set[:SystemKind]:
+          yield system
+      else:
+        if system.kind in filter:
+          yield system
+
 iterator poweredSystems*(entity: SpaceEntity): lent System =
   for system in entity.systems:
     if Powered in system.flags:
@@ -250,3 +266,8 @@ proc consumedPower*(entity: SpaceEntity): int =
   for consumer in entity.systemsOf(NotSystem {Generator}):
     if Powered in consumer.flags:
       result.inc consumer.powerUsage
+
+proc hasPoweredSystem*(entity: SpaceEntity, sys: SystemKind): bool =
+  for system in entity.poweredSystemsOf({sys}):
+    return true
+

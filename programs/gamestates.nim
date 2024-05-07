@@ -104,9 +104,14 @@ proc hasProgram*(gameState: var GameState, name: string): bool = name in gameSta
 proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.handlers
 proc getCommand*(gameState: var GameState, name: string): lent Command = gameState.handlers[InsensitiveString(name)]
 
-
 proc entityExists*(gameState: var GameState, name: string): bool =
   gameState.world.entityExists(name)
+
+proc getEntity*(gameState: GameState, name: string): lent SpaceEntity =
+  gameState.world.getEntity(name)
+
+proc getEntity*(gameState: var GameState, name: string): var SpaceEntity =
+  gameState.world.getEntity(name)
 
 proc takeControlOf*(gameState: var GameState, name: string): bool =
   ## takes control of a ship returning true if it can be found and connected to

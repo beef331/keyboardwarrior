@@ -2,6 +2,7 @@ import ../screenutils/texttables
 import pkg/truss3D/inputs
 import std/[algorithm, strutils, math, random, sets, strutils]
 import gamestates
+import ../data/spaceentity
 
 type
   HackGuess = object
@@ -139,10 +140,17 @@ proc hhs(gamestate: var GameState, input: string) =
   if gameState.hasProgram("hhs" & input):
     gameState.enterProgram("hhs" & input)
   elif gameState.entityExists(input):
-    var password = newString(5)
-    for ch in password.mitems:
-      ch = gameState.randState.sample(Digits + Letters)
-    gameState.enterProgram(HardwareHack.init(20, gameState.randState.rand(0..10), input, password, 3).toTrait(Program))
+    if gameState.getEntity(input).kind in {Ship, Station}:
+      if gameState.getEntity(input).hasPoweredSystem(Hacker):
+        var password = newString(5)
+        for ch in password.mitems:
+          ch = gameState.randState.sample(Digits + Letters)
+        gameState.enterProgram(HardwareHack.init(20, gameState.randState.rand(0..10), input, password, 3).toTrait(Program))
+      else:
+        gameState.writeError("Ship named: '" & input & "'. Has no network connection.\n")
+    else:
+      gameState.writeError("Cannot hack '" & $gameState.getEntity(input).kind & "'s.\n")
+
   else:
     gameState.writeError("Cannot find any entity named: '" & input & "'.\n")
 
