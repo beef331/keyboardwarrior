@@ -24,10 +24,6 @@ import std/private/asciitables
 import std/[parseutils, strutils, options, macros, sequtils, unicode, strbasics]
 import screenrenderer
 
-proc paramCount(T: typedesc[object or tuple]): int =
-  for _ in default(T).fields:
-    inc result
-
 proc alignRight*(s: string, count: Natural, padding = ' '): string =
   if s.len < count:
     result = padding.repeat(count - s.len)
@@ -43,6 +39,13 @@ type
 template tableName*(s: string){.pragma.}
 template tableAlign*(_: AlignFunction){.pragma.}
 template tableStringify*(p: proc {.nimcall.}){.pragma.}
+template tableSkip*() {.pragma.}
+
+
+proc paramCount(T: typedesc[object or tuple]): int =
+  for field in default(T).fields:
+    when not field.hasCustomPragma(tableSkip):
+      inc result
 
 proc toPrintedName(name: string): string =
   let firstCap = name.find({'A'..'Z'})
@@ -73,39 +76,41 @@ iterator tableEntries*[T](
 
   var fieldInd = 0
   for name, field in default(T).fieldPairs:
-    let nameStr =
-      when field.hasCustomPragma(tableName):
-        field.getCustomPragmaVal(tableName)
-      else:
-        const val = static: name.toPrintedName()
-        val
+    when not field.hasCustomPragma(tableSkip):
+      let nameStr =
+        when field.hasCustomPragma(tableName):
+          field.getCustomPragmaVal(tableName)
+        else:
+          const val = static: name.toPrintedName()
+          val
 
-    when field.hasCustomPragma(tableAlign):
-      alignFunctions[fieldInd] = field.getCustomPragmaVal(tableAlign)
+      when field.hasCustomPragma(tableAlign):
+        alignFunctions[fieldInd] = field.getCustomPragmaVal(tableAlign)
 
-    largest[fieldInd] = nameStr.len
-    strings.add (nameStr, headerProperties)
-    inc fieldInd
+      largest[fieldInd] = nameStr.len
+      strings.add (nameStr, headerProperties)
+      inc fieldInd
 
   var entryInd = 0
   for entry in values:
     fieldInd = 0
     let obj = entry # TODO: `hasCustomPragma` bug that requires this
     for field in obj.fields:
-      when field.hasCustomPragma(tableStringify):
-        let str = field.getCustomPragmaVal(tableStringify)[0](field)
-      else:
-        let str = $field
-
-
-      strings.add:
-        if entryInd < entryProperties.len:
-          (str, entryProperties[entryInd])
+      when not field.hasCustomPragma(tableSkip):
+        when field.hasCustomPragma(tableStringify):
+          let str = field.getCustomPragmaVal(tableStringify)[0](field)
         else:
-          (str, defaultProperties)
-      largest[fieldInd] = max(strings[^1][0].len, largest[fieldInd])
-      inc entryInd
-      inc fieldInd
+          let str = $field
+
+
+        strings.add:
+          if entryInd < entryProperties.len:
+            (str, entryProperties[entryInd])
+          else:
+            (str, defaultProperties)
+        largest[fieldInd] = max(strings[^1][0].len, largest[fieldInd])
+        inc entryInd
+        inc fieldInd
 
   for i, entry in strings:
     let alignInd = i mod T.paramCount

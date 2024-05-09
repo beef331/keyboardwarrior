@@ -3,14 +3,14 @@ import ../screenutils/screenrenderer
 import quadtrees
 
 type
-  InventoryEntry* = object
+  InventoryItem* = object
     name*: string
     count*: int
     cost*: int
     weight*: int
 
   Compartment* = object
-    inventory*: seq[InventoryEntry]
+    inventory*: seq[InventoryItem]
     maxLoad*: int
 
   EntityKind* = enum
@@ -101,7 +101,7 @@ type
     of Ship, Station:
       systems*: seq[System]
     of Asteroid:
-      resources: seq[InventoryEntry]
+      resources: seq[InventoryItem]
     of Projectile:
       projKind: WeaponKind
 

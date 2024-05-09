@@ -1,4 +1,5 @@
 import gamestates
+import ../data/spaceentity
 import ../screenutils/[texttables, boxes]
 import truss3D/inputs
 import std/[random, strutils]
@@ -22,6 +23,12 @@ type
     name {.tableAlign(alignLeft).}: string
     count: int
     cost {.tableStringify(moneyFormat[int]).}: int
+    case isSystem {.tableSkip.}: bool
+    of true:
+      system {.tableSkip.}: System
+    of false:
+      item {.tableSkip.}: InventoryItem
+
 
 var shopData: seq[ShopEntry]
 
