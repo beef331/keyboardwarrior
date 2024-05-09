@@ -14,7 +14,7 @@ proc statusHandler(gameState: var GameState, input: string) =
   var
     entries: seq[StatusEntry]
     props: seq[GlyphProperties]
-  for system in gameState.activeShipEntity.systems:
+  for system in gameState.activeShipEntity.shipData.systems:
     entries.add StatusEntry(
       name: system.name,
       powered: Powered in system.flags,

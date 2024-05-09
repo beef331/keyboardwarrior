@@ -1,5 +1,5 @@
 import ../screenutils/screenrenderer
-import ../data/spaceentity
+import ../data/[spaceentity, insensitivestrings]
 import pkg/[traitor, chroma, pixie]
 import std/[tables, strutils, hashes, random]
 import pkg/truss3D/inputs
@@ -7,23 +7,6 @@ import pkg/truss3D/inputs
 export screenrenderer, chroma, pixie
 
 const maxTextSize* = 80
-
-type InsensitiveString* = distinct string
-converter toString*(str: InsensitiveString): lent string = string(str)
-converter toString*(str: var InsensitiveString): var string = string(str)
-
-proc `==`(a, b: InsensitiveString): bool =
-  cmpIgnoreStyle(a, b) == 0
-
-proc hash(str: InsensitiveString): Hash =
-  for ch in str.items:
-    let ch = ch.toLowerAscii()
-    if ch != '_':
-      result = result !& hash(ch)
-
-  result = !$result
-
-proc insStr*(s: sink string): InsensitiveString = InsensitiveString(s)
 
 type
   ProgramFlag* = enum
@@ -118,7 +101,7 @@ proc takeControlOf*(gameState: var GameState, name: string): bool =
   result = gameState.world.entityExists(name) and name notin gameState.shipStack # O(N) Send help!
   if result:
     gameState.shipStack.add name
-    gameState.buffer.properties = gameState.activeShipEntity.glyphProperties
+    gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
 proc randState*(gameState: var GameState): var Rand = gameState.world.randState
 
@@ -150,11 +133,12 @@ proc init*(_: typedesc[GameState]): GameState =
 
   result.add Command(
     name: "exit",
-    help: "Exits the currently controlled ship\n\tif there not controlling the player ship.",
+    help: "Exits the currently controlled ship.",
     handler: proc(gameState: var GameState, input: string) =
       if input == "player":
         gameState.shipStack.setLen(1)
       elif gameState.shipStack.len > 1:
+        gameState.buffer.properties = gameState.getEntity(gameState.shipStack[^2]).shipData.glyphProperties
         gameState.buffer.put("Exited: " & gameState.activeShip & "\n")
         gameState.shipStack.setLen(gameState.shipStack.high)
       else:
@@ -211,7 +195,7 @@ proc update*(gameState: var GameState, dt: float) =
     startCount = gameState.shipStack.len
 
   if gameState.shipStack.len > 0:
-    gameState.buffer.properties = gameState.activeShipEntity.glyphProperties
+    gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
 
   gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
@@ -286,7 +270,7 @@ proc update*(gameState: var GameState, dt: float) =
   setInputText("")
 
   if gameState.shipStack.len > 0 and startCount == gameState.shipStack.len:
-    gameState.activeShipEntity.glyphProperties = gameState.buffer.properties
+    gameState.activeShipEntity.shipData.glyphProperties = gameState.buffer.properties
 
   gameState.buffer.properties = props
 

@@ -1,6 +1,7 @@
 import std/[tables, random, hashes, sysrand, math]
 import ../screenutils/screenrenderer
 import quadtrees
+import insensitivestrings
 
 type
   InventoryItem* = object
@@ -88,6 +89,10 @@ type
     of Generator:
       discard
 
+  ShipData* = ref object # Pointer indirection to reduces size of SpaceEntity
+    glyphProperties*: GlyphProperties
+    systems*: seq[System]
+
   SpaceEntity* = object
     node: int # For the tree
     name*: string
@@ -96,10 +101,9 @@ type
     velocity*: float32
     maxSpeed*: float32
     heading: float32
-    glyphProperties*: GlyphProperties
     case kind*: EntityKind
     of Ship, Station:
-      systems*: seq[System]
+      shipData*: ShipData
     of Asteroid:
       resources: seq[InventoryItem]
     of Projectile:
@@ -107,8 +111,8 @@ type
 
   Chunk = object
     entities: QuadTree[SpaceEntity]
-    nameToEntityInd: Table[string, QuadTreeIndex]
-    nameCount: CountTable[string]
+    nameToEntityInd: Table[InsensitiveString, QuadTreeIndex]
+    nameCount: CountTable[InsensitiveString]
 
   World* = object
     player: QuadTreeIndex
@@ -121,7 +125,7 @@ type
 
 proc canHack*(spaceEntity: SpaceEntity): bool =
   if spaceEntity.kind in {Ship, Station}:
-    for sys in spaceEntity.systems:
+    for sys in spaceEntity.shipData.systems:
       if sys.kind == Hacker and Powered in sys.flags:
         return true
 
@@ -145,29 +149,29 @@ proc init*(world: var World, playerName, seed: string) =
       x: 500,
       y: 500,
       maxSpeed: 3,
-      systems: @[
-        System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
-        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
-        System(name: "Warp Core", kind: Generator, powerUsage: 300),
-      ],
-      glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black"))
+      shipData:
+        ShipData(
+          glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
+          systems: @[
+            System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+            System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
+            System(name: "Warp Core", kind: Generator, powerUsage: 300),
+          ]
+        )
     )
-  world.activeChunk = Chunk(entities: qt, nameToEntityInd: {playerName: world.player}.toTable())
+  world.activeChunk = Chunk(entities: qt, nameToEntityInd: {insStr playerName: world.player}.toTable())
 
   const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
 
   for _ in 0..1000:
     let
       selectedName = world.randState.sample(entityNames)
-      name = selectedName & $world.activeChunk.nameCount.getOrDefault(selectedName)
+      name = selectedName & $world.activeChunk.nameCount.getOrDefault(insStr selectedName)
       x = world.randState.rand(100d..900d)
       y =  world.randState.rand(100d..900d)
       vel =  world.randState.rand(1d..5d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
-      props = GlyphProperties(
-        foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
-      )
 
     var ent = SpaceEntity(
       kind: if selectedName == entityNames[1]: Asteroid else: Ship,
@@ -178,7 +182,6 @@ proc init*(world: var World, playerName, seed: string) =
       maxSpeed: world.randState.rand(vel .. 5d),
       faction: faction,
       heading: heading,
-      glyphProperties: props,
     )
 
 
@@ -190,17 +193,22 @@ proc init*(world: var World, playerName, seed: string) =
         else:
           {}
 
-      ent.systems = @[
-        System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
-        System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
-        System(name: "Warp Core", kind: Generator, powerUsage: 300),
-      ]
+      ent.shipData = ShipData(
+        glyphProperties: GlyphProperties(
+          foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
+        ),
+        systems: @[
+          System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+          System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
+          System(name: "Warp Core", kind: Generator, powerUsage: 300),
+        ]
+      )
 
-    world.activeChunk.nameToEntityInd[name] = world.activeChunk.entities.add ent
+    world.activeChunk.nameToEntityInd[insStr name] = world.activeChunk.entities.add ent
 
 
 
-    inc world.activeChunk.nameCount, selectedName
+    inc world.activeChunk.nameCount, insStr selectedName
 
 proc update*(world: var World, dt: float32) =
   for entity in world.activeChunk.entities.mitems:
@@ -222,15 +230,15 @@ proc player*(world: World): lent SpaceEntity =
   world.activeChunk.entities[world.player]
 
 proc getEntity*(world: World, name: string): lent SpaceEntity =
-  world.activeChunk.entities[world.activeChunk.nameToEntityInd[name]]
+  world.activeChunk.entities[world.activeChunk.nameToEntityInd[insStr name]]
 
 proc getEntity*(world: var World, name: string): var SpaceEntity =
-  world.activeChunk.entities[world.activeChunk.nameToEntityInd[name]]
+  world.activeChunk.entities[world.activeChunk.nameToEntityInd[insStr name]]
 
-proc entityExists*(world: World, name: string): bool = name in world.activeChunk.nameToEntityInd
+proc entityExists*(world: World, name: string): bool = insStr(name) in world.activeChunk.nameToEntityInd
 
 iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
-  for system in entity.systems:
+  for system in entity.shipData.systems:
     when filter is NotSystem:
       if system.kind notin filter.set[:SystemKind]:
         yield system
@@ -239,7 +247,7 @@ iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): l
         yield system
 
 iterator poweredSystemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
-  for system in entity.systems:
+  for system in entity.shipData.systems:
     if Powered in system.flags:
       when filter is NotSystem:
         if system.kind notin filter.set[:SystemKind]:
@@ -249,12 +257,12 @@ iterator poweredSystemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSys
           yield system
 
 iterator poweredSystems*(entity: SpaceEntity): lent System =
-  for system in entity.systems:
+  for system in entity.shipData.systems:
     if Powered in system.flags:
       yield system
 
 iterator unpoweredSystems*(entity: SpaceEntity): lent System =
-  for system in entity.systems:
+  for system in entity.shipData.systems:
     if Powered notin system.flags:
       yield system
 
