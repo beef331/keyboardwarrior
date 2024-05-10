@@ -31,8 +31,9 @@ type
     fg: int32
     bg: int32
     fontIndex: uint32
-    _: int32# Reserved
-    matrix* {.align: 16.}: Mat4
+    _: int32 # Reserved
+    xyzr: Vec4
+    wh: Vec4
 
   RenderInstance = seq[FontRenderObj]
 
@@ -207,7 +208,16 @@ proc upload*(buffer: var Buffer, dt: float32) =
         let
           whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
           id = entry.id.uint32 or whiteSpaceBit
-        buffer.fontTarget.model.push FontRenderObj(fg: theFg, bg: theBg, fontIndex: id , matrix: translate(vec3(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0)) * scale(vec3(size, 1)))
+          xyzr = vec4(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0, 0)
+          wh = vec4(size.x, size.y, 0, 0)
+
+        buffer.fontTarget.model.push FontRenderObj(
+          fg: theFg,
+          bg: theBg,
+          fontIndex: id,
+          xyzr: xyzr,
+          wh: wh
+          )
 
       if rune == Rune('\n'):
         break

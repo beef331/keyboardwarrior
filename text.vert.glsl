@@ -28,7 +28,8 @@ struct data{
   int fg;
   int bg;
   uint fontIndex;
-  mat4 matrix;
+  vec4 xyzr;
+  vec4 wh;
 };
 
 layout(std430, binding = 0) buffer instanceData{
@@ -46,7 +47,16 @@ flat out uint fontIndex;
 
 void main(){
   data theData = instData[gl_InstanceID];
-  gl_Position = theData.matrix * vec4(vertex_position, 0, 1);
+  mat4 translation = mat4(1);
+  translation[3][0] = theData.xyzr.x;
+  translation[3][1] = theData.xyzr.y;
+  translation[3][2] = theData.xyzr.z;
+
+  mat4 scale = mat4(1);
+  scale[0][0] = theData.wh.x;
+  scale[1][1] = theData.wh.y;
+
+  gl_Position = (translation * scale) * vec4(vertex_position, 0, 1);
   fUv = uv;
   fg = colours[theData.fg];
   bg = colours[theData.bg];
