@@ -158,6 +158,7 @@ proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   if color notin buffer.colorInd:
     let colInd = buffer.colors.len
     buffer.colors.add color
+    buffer.colorInd[color] = colInd
     buffer.dirtiedColors = true
     colInd
   else:
