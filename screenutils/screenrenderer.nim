@@ -81,6 +81,8 @@ type
     atlas: FontAtlas
     shader: Shader
     fontTarget: UiRenderTarget
+
+    dirtiedColors: bool = true # Always first upload
     colors: seq[Color]
     colorSsbo: SSBO[seq[Color]]
     colorInd: Table[chroma.Color, int]
@@ -96,6 +98,7 @@ type
     useFrameBuffer: bool
     frameBufferSetup: bool
     frameBuffer: FrameBuffer
+
 
 proc pixelHeight*(buffer: Buffer): int = buffer.pixelHeight
 proc pixelWidth*(buffer: Buffer): int = buffer.pixelWidth
@@ -155,6 +158,7 @@ proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
   if color notin buffer.colorInd:
     let colInd = buffer.colors.len
     buffer.colors.add color
+    buffer.dirtiedColors = true
     colInd
   else:
     buffer.colorInd[color]
@@ -230,7 +234,10 @@ proc upload*(buffer: var Buffer, dt: float32) =
     x = -1f
 
   if rendered:
-    buffer.colors.copyTo buffer.colorSsbo
+    if buffer.dirtiedColors:
+      buffer.colors.copyTo buffer.colorSsbo
+      buffer.dirtiedColors = false
+
     buffer.fontTarget.model.reuploadSsbo()
   buffer.frameBuffer.clearColor = buffer.properties.background
 
