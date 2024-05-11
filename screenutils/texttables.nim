@@ -20,8 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import std/private/asciitables
-import std/[parseutils, strutils, options, macros, sequtils, unicode, strbasics]
+import std/[strutils, options, macros, sequtils, unicode, strbasics]
 import screenrenderer
 
 proc alignRight*(s: string, count: Natural, padding = ' '): string =

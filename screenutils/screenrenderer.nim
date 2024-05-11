@@ -155,14 +155,14 @@ proc setLineHeight*(buffer: var Buffer, height: int) =
   buffer.recalculateBuffer()
 
 proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
-  if color notin buffer.colorInd:
+  buffer.colorInd.withValue color, ind:
+    return int32 ind[]
+  do:
     let colInd = buffer.colors.len
     buffer.colors.add color
     buffer.colorInd[color] = colInd
     buffer.dirtiedColors = true
-    colInd
-  else:
-    buffer.colorInd[color]
+    return int32 colInd
 
 proc getFrameBufferTexture*(buffer: Buffer): lent Texture = buffer.frameBuffer.colourTexture
 
@@ -207,9 +207,18 @@ proc upload*(buffer: var Buffer, dt: float32) =
       if (prop.blinkSpeed == 0 or round(buffer.time * prop.blinkSpeed).int mod 2 != 0) and glyph.rune != Rune(0):
         let
           sineOffset = sin((buffer.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
-          shakeOffsetX = buffer.noise.evaluate((buffer.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
-          shakeOffsetY = buffer.noise.evaluate((buffer.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
+          shakeOffsetX =
+            if prop.shakeStrength > 0:
+              buffer.noise.evaluate((buffer.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
+            else:
+              0
+          shakeOffsetY =
+            if prop.shakeStrength > 0:
+              buffer.noise.evaluate((buffer.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
+            else:
+              0
         rendered = true
+
         let
           whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
           id = entry.id.uint32 or whiteSpaceBit
@@ -316,6 +325,8 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
   if buff.lines.len == 0:
     buff.lines.add Line()
 
+  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+
   for rune in s.chr:
     when getBuffer:
       result.add buff.lines[buff.cursorY].glyphs[buff.cursorX]
@@ -325,14 +336,13 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
       buff.cursorX = 0
       inc buff.cursorY
     elif buff.cursorX < buff.lineWidth:
-      let ind = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
-      if ind == uint16 buff.cachedProperties.len:
-        buff.propToInd[props] = ind
+      if propInd == uint16 buff.cachedProperties.len:
+        buff.propToInd[props] = propInd
         buff.cachedProperties.add props
 
       buff.lines[buff.cursorY].glyphs[buff.cursorX] =
         when rune is Rune:
-          Glyph(rune: rune, properties: ind)
+          Glyph(rune: rune, properties: propInd)
         else:
           rune
 

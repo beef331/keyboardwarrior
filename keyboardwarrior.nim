@@ -1,15 +1,12 @@
-import std/[strutils, strscans, tables, xmltree, htmlparser, hashes, algorithm, random, times, os]
+import std/[times, os]
 import screenutils/screenrenderer
 import programs/[gamestates]
-import pkg/truss3D/[inputs, models]
 import pkg/[vmath, pixie, truss3D]
 
 var
   gameState: GameState
-  screenModel, coverModel: Model
   coverTex: Texture
-  screenShader, coverShader: Shader
-  cameraPos: Vec3 = vec3(0.15, -0.6, -0.8)
+  screenShader: Shader
   rectModel: Model
   time: float32
   shaderModificationTime: Time
@@ -17,8 +14,6 @@ var
 
 proc init =
   gameState = GameState.init()
-  screenModel = loadModel("consolescreen.glb")
-  coverModel = loadModel("console.glb")
   coverTex = genTexture()
 
   var modelData: MeshData[Vec2]
