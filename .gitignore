@@ -3,3 +3,5 @@
 !*/
 *.dll
 *.exe
+*.debug.png
+*.test.png

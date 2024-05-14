@@ -120,8 +120,7 @@ proc recalculateBuffer*(buffer: var Buffer) =
     buffer.useFrameBuffer = true
     buffer.frameBufferSetup = true
 
-
-proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false) =
+proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true) =
   buffer.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
   buffer.shader = loadShader(guiVert, guiFrag)
   var modelData: MeshData[Vec2]
@@ -132,7 +131,11 @@ proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false
   buffer.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
   buffer.colorSsbo = genSsbo[seq[Color]](1)
   buffer.atlas.font.size = 64
-  buffer.noise = newOpenSimplex()
+  buffer.noise =
+    if seedNoise:
+      newOpenSimplex()
+    else:
+      newOpenSimplex(0)
   buffer.useFrameBuffer = useFrameBuffer
   buffer.recalculateBuffer()
 
