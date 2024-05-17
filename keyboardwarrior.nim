@@ -11,7 +11,6 @@ var
   time: float32
   shaderModificationTime: Time
 
-
 proc init =
   gameState = GameState.init()
   coverTex = genTexture()
