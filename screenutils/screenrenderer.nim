@@ -69,20 +69,49 @@ iterator mitems(line: var Line): var Glyph =
     yield glyph
 
 type
+  BufferMode* = enum
+    Text
+    Graphics
+
+  ShapeKind* = enum
+    Rectangle
+    Ellipse
+    LinePath
+    Character
+
+  Shape* = object
+    x, y: float32
+    props: uint16
+    case kind: ShapeKind
+    of Rectangle:
+      rectW, rectH: float32
+    of Ellipse:
+      eRadius1, eRadius2: float32
+    of LinePath:
+      model: Model
+    of Character:
+      rune: Rune
+
   Buffer* = object
-    lines: seq[Line]
+    mode*: BufferMode
     pixelHeight: int
     pixelWidth: int
+    atlas: FontAtlas
+    fontTarget: UiRenderTarget
+    textShader: Shader
+    graphicShader: Shader
+
+    lines: seq[Line]
     lineHeight*: int
     lineWidth*: int
     cameraPos*: int
     cursorX: int
     cursorY: int
-    atlas: FontAtlas
-    shader: Shader
-    fontTarget: UiRenderTarget
 
-    dirtiedColors: bool = true # Always first upload
+    shapes: seq[Shape] ## Used for graphics mode
+
+
+    dirtiedColors: bool = true ## Always upload when just instantiated
     colors: seq[Color]
     colorSsbo: SSBO[seq[Color]]
     colorInd: Table[chroma.Color, int]
@@ -100,124 +129,127 @@ type
     frameBuffer: FrameBuffer
 
 
-proc pixelHeight*(buffer: Buffer): int = buffer.pixelHeight
-proc pixelWidth*(buffer: Buffer): int = buffer.pixelWidth
+proc pixelHeight*(buff: Buffer): int = buff.pixelHeight
+proc pixelWidth*(buff: Buffer): int = buff.pixelWidth
 
 const
   relativeTextShaderPath {.strDefine.} = ""
   guiVert = ShaderPath relativeTextShaderPath / "text.vert.glsl"
   guiFrag = ShaderPath relativeTextShaderPath / "text.frag.glsl"
 
-proc recalculateBuffer*(buffer: var Buffer) =
-  let charEntry = buffer.atlas.runeEntry(Rune('W'))
-  buffer.pixelWidth = buffer.lineWidth * charEntry.rect.w.int div 2
-  buffer.pixelHeight = buffer.lineHeight * charEntry.rect.h.int div 2
-  if buffer.lines.len == 0:
-    buffer.lines.add Line()
-  if buffer.useFrameBuffer:
-    buffer.frameBuffer = genFrameBuffer(ivec2(buffer.pixelWidth, buffer.pixelHeight), tfRgba, wrapMode = ClampedToBorder)
+proc recalculateBuffer*(buff: var Buffer) =
+  let charEntry = buff.atlas.runeEntry(Rune('W'))
+  buff.pixelWidth = buff.lineWidth * charEntry.rect.w.int div 2
+  buff.pixelHeight = buff.lineHeight * charEntry.rect.h.int div 2
+  if buff.lines.len == 0:
+    buff.lines.add Line()
+  if buff.useFrameBuffer:
+    buff.frameBuffer = genFrameBuffer(ivec2(buff.pixelWidth, buff.pixelHeight), tfRgba, wrapMode = ClampedToBorder)
 
-    buffer.useFrameBuffer = true
-    buffer.frameBufferSetup = true
+    buff.useFrameBuffer = true
+    buff.frameBufferSetup = true
 
-proc initResources*(buffer: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true) =
-  buffer.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
-  buffer.shader = loadShader(guiVert, guiFrag)
+proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true) =
+  buff.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
+  buff.textShader = loadShader(guiVert, guiFrag)
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
   modelData.append [0u32, 1, 2, 0, 2, 3].items
   modelData.appendUv [vec2(0, 1), vec2(0, 0), vec2(1, 0), vec2(1, 1)].items
 
-  buffer.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
-  buffer.colorSsbo = genSsbo[seq[Color]](1)
-  buffer.atlas.font.size = 64
-  buffer.noise =
+  buff.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
+  buff.colorSsbo = genSsbo[seq[Color]](1)
+  buff.atlas.font.size = 64
+  buff.noise =
     if seedNoise:
       newOpenSimplex()
     else:
       newOpenSimplex(0)
-  buffer.useFrameBuffer = useFrameBuffer
-  buffer.recalculateBuffer()
+  buff.useFrameBuffer = useFrameBuffer
+  buff.recalculateBuffer()
 
-proc fontSize*(buffer: Buffer): int =  int buffer.atlas.font.size
+proc fontSize*(buff: Buffer): int =  int buff.atlas.font.size
 
-proc setFontSize*(buffer: var Buffer, size: int) =
-  buffer.atlas.setFontSize(size.float32)
-  buffer.recalculateBuffer()
+proc setFontSize*(buff: var Buffer, size: int) =
+  buff.atlas.setFontSize(size.float32)
+  buff.recalculateBuffer()
 
-proc setFont*(buffer: var Buffer, font: Font) =
-  buffer.atlas.setFont(font)
-  buffer.recalculateBuffer()
+proc setFont*(buff: var Buffer, font: Font) =
+  buff.atlas.setFont(font)
+  buff.recalculateBuffer()
 
-proc setLineWidth*(buffer: var Buffer, width: int) =
-  buffer.lineWidth = width
-  buffer.recalculateBuffer()
+proc setLineWidth*(buff: var Buffer, width: int) =
+  assert buff.mode == Text
+  buff.lineWidth = width
+  buff.recalculateBuffer()
 
-proc setLineHeight*(buffer: var Buffer, height: int) =
-  buffer.lineHeight = height
-  buffer.recalculateBuffer()
+proc setLineHeight*(buff: var Buffer, height: int) =
+  assert buff.mode == Text
+  buff.lineHeight = height
+  buff.recalculateBuffer()
 
-proc getColorIndex(buffer: var Buffer, color: chroma.Color): int32 =
-  buffer.colorInd.withValue color, ind:
+proc getColorIndex(buff: var Buffer, color: chroma.Color): int32 =
+  buff.colorInd.withValue color, ind:
     return int32 ind[]
   do:
-    let colInd = buffer.colors.len
-    buffer.colors.add color
-    buffer.colorInd[color] = colInd
-    buffer.dirtiedColors = true
+    let colInd = buff.colors.len
+    buff.colors.add color
+    buff.colorInd[color] = colInd
+    buff.dirtiedColors = true
     return int32 colInd
 
-proc getFrameBufferTexture*(buffer: Buffer): lent Texture = buffer.frameBuffer.colourTexture
+proc getFrameBufferTexture*(buff: Buffer): lent Texture = buff.frameBuffer.colourTexture
 
-proc toggleFrameBuffer*(buffer: var Buffer) =
-  buffer.useFrameBuffer = not buffer.useFrameBuffer
-  if not buffer.framebufferSetup: # TODO: framebuffer.id != 0
-    buffer.recalculateBuffer()
+proc toggleFrameBuffer*(buff: var Buffer) =
+  buff.useFrameBuffer = not buff.useFrameBuffer
+  if not buff.framebufferSetup: # TODO: framebuff.id != 0
+    buff.recalculateBuffer()
 
 proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 
-proc upload*(buffer: var Buffer, dt: float32) =
-  buffer.time += dt
+proc uploadTextMode(buff: var Buffer, dt: float32) =
+  assert buff.mode == Text
+  buff.time += dt
   let scrSize =
-    if buffer.useFrameBuffer:
-      vec2(buffer.pixelWidth.float32, buffer.pixelHeight.float32)
+    if buff.useFrameBuffer:
+      vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
     else:
       vec2 screenSize()
 
-  var (x, y) = (-1f, 1f - buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y)
-  buffer.fontTarget.model.clear()
+  var (x, y) = (-1f, 1f - buff.atlas.runeEntry(Rune('+')).rect.h / scrSize.y)
+  buff.fontTarget.model.clear()
   var rendered = false
-  for ind in buffer.cameraPos .. buffer.cursorY:
-    for xPos, glyph in buffer.lines[ind]:
-      if xPos > buffer.lineWidth:
+  for ind in buff.cameraPos .. buff.cursorY:
+    for xPos, glyph in buff.lines[ind]:
+      if xPos > buff.lineWidth:
         break
       let
-        prop = buffer.cachedProperties[int glyph.properties]
+        prop = buff.cachedProperties[int glyph.properties]
         rune =
           if glyph.rune == Rune(0):
             Rune('+')
           else:
             glyph.rune
-        entry = buffer.atlas.runeEntry(rune)
-        theFg = buffer.getColorIndex(prop.foreground)
-        theBg = buffer.getColorIndex(prop.background)
+        entry = buff.atlas.runeEntry(rune)
+        theFg = buff.getColorIndex(prop.foreground)
+        theBg = buff.getColorIndex(prop.background)
         size =
           if entry.rect.w == 0:
-            buffer.atlas.runeEntry(Rune('+')).rect.wh / scrSize
+            buff.atlas.runeEntry(Rune('+')).rect.wh / scrSize
           else:
             entry.rect.wh / scrSize
 
-      if (prop.blinkSpeed == 0 or round(buffer.time * prop.blinkSpeed).int mod 2 != 0) and glyph.rune != Rune(0):
+      if (prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0) and glyph.rune != Rune(0):
         let
-          sineOffset = sin((buffer.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
+          sineOffset = sin((buff.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
           shakeOffsetX =
             if prop.shakeStrength > 0:
-              buffer.noise.evaluate((buffer.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
+              buff.noise.evaluate((buff.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
             else:
               0
           shakeOffsetY =
             if prop.shakeStrength > 0:
-              buffer.noise.evaluate((buffer.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
+              buff.noise.evaluate((buff.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
             else:
               0
         rendered = true
@@ -228,7 +260,7 @@ proc upload*(buffer: var Buffer, dt: float32) =
           xyzr = vec4(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0, 0)
           wh = vec4(size.x, size.y, 0, 0)
 
-        buffer.fontTarget.model.push FontRenderObj(
+        buff.fontTarget.model.push FontRenderObj(
           fg: theFg,
           bg: theBg,
           fontIndex: id,
@@ -239,51 +271,64 @@ proc upload*(buffer: var Buffer, dt: float32) =
       if rune == Rune('\n'):
         break
       elif rune.isWhiteSpace:
-        x += buffer.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
+        x += buff.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
       else:
         x += size.x
 
-    y -= buffer.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
+    y -= buff.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
     x = -1f
 
   if rendered:
-    if buffer.dirtiedColors:
-      buffer.colors.copyTo buffer.colorSsbo
-      buffer.dirtiedColors = false
+    if buff.dirtiedColors:
+      buff.colors.copyTo buff.colorSsbo
+      buff.dirtiedColors = false
 
-    buffer.fontTarget.model.reuploadSsbo()
-  buffer.frameBuffer.clearColor = buffer.properties.background
+    buff.fontTarget.model.reuploadSsbo()
+  buff.frameBuffer.clearColor = buff.properties.background
 
-proc render*(buffer: Buffer) =
+proc uploadGraphicsMode(buff: var Buffer, dt: float32) =
+  assert buff.mode == Graphics
+
+proc upload*(buff: var Buffer, dt: float32) =
+  case buff.mode
+  of Text:
+    buff.uploadTextMode(dt)
+  of Graphics:
+    buff.uploadGraphicsMode(dt)
+
+proc render*(buff: Buffer) =
   var old: (Glint, Glint, GlSizeI, GlSizeI)
-  if buffer.useFrameBuffer:
+  if buff.useFrameBuffer:
     glGetIntegerv(GlViewPort, old[0].addr)
-    glViewport(0, 0, buffer.pixelWidth, buffer.pixelHeight)
-    buffer.frameBuffer.clear()
-    buffer.frameBuffer.bindBuffer()
-  buffer.colorSsbo.bindBuffer(1)
-  buffer.atlas.ssbo.bindBuffer(2)
-  with buffer.shader:
+    glViewport(0, 0, buff.pixelWidth, buff.pixelHeight)
+    buff.frameBuffer.clear()
+    buff.frameBuffer.bindBuffer()
+  buff.colorSsbo.bindBuffer(1)
+  buff.atlas.ssbo.bindBuffer(2)
+  with buff.textShader:
     glEnable(GlBlend)
     glBlendFunc(GlOne, GlOneMinusSrcAlpha)
 
-    buffer.shader.setUniform("fontTex", buffer.atlas.texture)
-    buffer.fontTarget.model.render()
+    buff.textShader.setUniform("fontTex", buff.atlas.texture)
+    buff.fontTarget.model.render()
     glDisable(GlBlend)
-  if buffer.useFrameBuffer:
+  if buff.useFrameBuffer:
     glViewport(old[0], old[1], old[2], old[3])
     unbindFrameBuffer()
 
 proc clearLine*(buff: var Buffer, lineNum: int) =
   ## Writes over `start`
+  assert buff.mode == Text
   reset buff.lines[lineNum]
 
 proc clearLine*(buff: var Buffer) =
   ## Writes over `start`
+  assert buff.mode == Text
   buff.clearLine(buff.cursorY)
   buff.cursorX = 0
 
 proc clearTo*(buff: var Buffer, line: int) =
+  assert buff.mode == Text
   for line in buff.lines.toOpenArray(line, buff.lines.high).mitems:
     reset line
 
@@ -293,6 +338,7 @@ proc clearTo*(buff: var Buffer, line: int) =
   buff.lines.setLen(line + 1)
 
 proc clearTo*(buff: var Buffer, x, y: int) =
+  assert buff.mode == Text
   for line in buff.lines.toOpenArray(y + 1, buff.lines.high).mitems:
     reset line
 
@@ -303,6 +349,7 @@ proc clearTo*(buff: var Buffer, x, y: int) =
   buff.cursorX = x
 
 proc newLine*(buff: var Buffer) =
+  assert buff.mode == Text
   buff.lines.add Line()
   inc buff.cursorY
   buff.cursorX = 0
@@ -322,6 +369,7 @@ proc isNewLine(glyph: Glyph): bool = glyph.rune.isNewLine()
 
 
 proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false): auto =
+  assert buff.mode == Text
   when getBuffer:
     result = newSeq[Glyph]()
 
@@ -363,69 +411,101 @@ proc put*(buff: var Buffer, s: seq[Glyph], props: GlyphProperties, moveCamera = 
 proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true) =
   put buff, s, buff.properties, moveCamera
 
+proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: GlyphProperties) =
+  assert buff.mode == Graphics
+  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+  var (x, y) = (x, y)
+  for rune in s.runes:
+    buff.shapes.add Shape(
+      x: x,
+      y: y,
+      kind: Character,
+      rune: rune,
+      props: propInd
+    )
+    let entry = buff.atlas.runeEntry(rune)
+    x += entry.rect.x
+
+proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32) =
+  buff.drawText(s, x, y, rot, scale, buff.properties)
+
+proc drawText*(buff: var Buffer, s: string, x, y: float32) =
+  buff.drawText(s, x, y, 0, 1, buff.properties)
+
+proc drawLine*(buff: var Buffer, points: openArray[Vec2], width: float32, props: GlyphProperties) =
+  assert buff.mode == Graphics
+
 proc fetchAndPut*(buff: var Buffer, s: string, moveCamera = true): seq[Glyph] =
   put buff, s, buff.properties, moveCamera, true
 
 proc scrollUp*(buff: var Buffer) =
+  assert buff.mode == Text
   buff.cameraPos = max(buff.cameraPos - 1, 0)
 
 proc scrollTo*(buff: var Buffer, pos: int) =
+  assert buff.mode == Text
   buff.cameraPos = pos
 
 proc scrollDown*(buff: var Buffer) =
+  assert buff.mode == Text
   buff.cameraPos = min(buff.cameraPos + 1, buff.lines.high)
 
-proc toTop*(buffer: var Buffer) =
-  buffer.cameraPos = 0
+proc toTop*(buff: var Buffer) =
+  assert buff.mode == Text
+  buff.cameraPos = 0
 
-proc toBottom*(buffer: var Buffer) =
-  buffer.cameraPos = buffer.lines.high
+proc toBottom*(buff: var Buffer) =
+  assert buff.mode == Text
+  buff.cameraPos = buff.lines.high
 
 proc getPosition*(buff: var Buffer): (int, int) =
+  assert buff.mode == Text
   (buff.cursorX, buff.cursorY)
 
-proc setPosition*(buffer: var Buffer, x, y: int) =
-  (buffer.cursorX, buffer.cursorY) = (x, y)
-  buffer.lines.setLen(max(y + 1, buffer.lines.len))
+proc setPosition*(buff: var Buffer, x, y: int) =
+  assert buff.mode == Text
+  (buff.cursorX, buff.cursorY) = (x, y)
+  buff.lines.setLen(max(y + 1, buff.lines.len))
 
-template withPos*(buffer: var Buffer, x, y: int, body: untyped) =
-  ## This moves the buffer then returns it back to it's previous position
-  let pos = buffer.getPosition()
-  buffer.setPosition(x, y)
+template withPos*(buff: var Buffer, x, y: int, body: untyped) =
+  assert buff.mode == Text
+  ## This moves the buff then returns it back to it's previous position
+  let pos = buff.getPosition()
+  buff.setPosition(x, y)
   body
-  buffer.setPosition(pos[0], pos[1])
+  buff.setPosition(pos[0], pos[1])
 
 
 when isMainModule:
   const clear = color(0, 0, 0, 0)
   var
-    buffer = Buffer(lineWidth: 40, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
+    buff = Buffer(lineWidth: 40, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
     fontPath = "../PublicPixel.ttf"
 
   proc init =
-    buffer.initResources(fontPath)
+    buff.initResources(fontPath)
     startTextInput(default(inputs.Rect), "")
-    buffer.put("hello world!", GlyphProperties(foreground: parseHtmlColor"Green", background: parseHtmlColor"Yellow", sineSpeed: 5f, sineStrength: 1f))
-    buffer.put(" bleh \n\n", GlyphProperties(foreground: parseHtmlColor"Green"))
-    buffer.put("\nHello travllllllerrrrs", GlyphProperties(foreground: parseHtmlColor"Purple", background: parseHtmlColor"Beige", shakeSpeed: 5f, shakeStrength: 0.25f))
-    buffer.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"Red", blinkSpeed: 5f))
-    buffer.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"White", blinkSpeed: 1f))
-    buffer.put("\n>")
+    buff.put("hello world!", GlyphProperties(foreground: parseHtmlColor"Green", background: parseHtmlColor"Yellow", sineSpeed: 5f, sineStrength: 1f))
+    buff.put(" bleh \n\n", GlyphProperties(foreground: parseHtmlColor"Green"))
+    buff.put("\nHello travllllllerrrrs", GlyphProperties(foreground: parseHtmlColor"Purple", background: parseHtmlColor"Beige", shakeSpeed: 5f, shakeStrength: 0.25f))
+    buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"Red", blinkSpeed: 5f))
+    buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"White", blinkSpeed: 1f))
+    buff.put("\n>")
 
 
   proc update(dt: float32) =
     if isTextInputActive():
       if inputText().len > 0:
-        buffer.put inputText()
+        buff.put inputText()
         setInputText("")
       if KeyCodeReturn.isDownRepeating():
-        buffer.put("\n>")
+        buff.put("\n>")
     if KeyCodeUp.isDownRepeating():
-      buffer.scrollUp()
+      buff.scrollUp()
     if KeyCodeDown.isDownRepeating():
-      buffer.scrollDown()
-    buffer.upload(dt)
+      buff.scrollDown()
+    buff.upload(dt)
 
   proc draw =
-    buffer.render()
-  initTruss("Something", ivec2(buffer.pixelWidth, buffer.pixelHeight), init, update, draw, vsync = true)
+    buff.render()
+  initTruss("Something", ivec2(buff.pixelWidth, buff.pixelHeight), init, update, draw, vsync = true)
