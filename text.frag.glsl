@@ -38,7 +38,7 @@ flat in uint fontIndex;
 void main() {
   uint mask = (1 << 31) ^ 0xffffffff;
   uint realIndex = mask & fontIndex;
-  float whiteSpace = float((1 << 31) & fontIndex);
+  float whiteSpace = float(fontIndex >> 31 & 1);
   vec2 offset = fontData[fontIndex - 1].xy;
   vec2 size = fontData[fontIndex - 1].zw;
   vec2 texSize = vec2(textureSize(fontTex, 0));

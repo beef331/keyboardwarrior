@@ -75,13 +75,14 @@ type
     Graphics
 
   ShapeKind* = enum
+    Character # Always needs to be first
     Rectangle
     Ellipse
     LinePath
-    Character
 
   Shape* = object
     x, y: float32
+    scale: float32
     props: uint16
     case kind: ShapeKind
     of Rectangle:
@@ -214,7 +215,7 @@ proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 proc propIsVisible(buff: Buffer, prop: GlyphProperties): bool =
   prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0
 
-proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int): (bool, Rune, Vec2) =
+proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int, scale = 1f32): (bool, Rune, Vec2) =
   let
     prop = buff.cachedProperties[int glyph.properties]
     rune =
@@ -227,9 +228,9 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
     theBg = buff.getColorIndex(prop.background)
     size =
       if entry.rect.w == 0:
-        buff.atlas.runeEntry(Rune('+')).rect.wh / scrSize
+        buff.atlas.runeEntry(Rune('+')).rect.wh / scrSize * scale
       else:
-        entry.rect.wh / scrSize
+        entry.rect.wh / scrSize * scale
   result = (
     buff.propIsVisible(prop) and glyph.rune != Rune(0),
     rune,
@@ -299,8 +300,8 @@ proc uploadTextMode(buff: var Buffer) =
     buff.fontTarget.model.reuploadSsbo()
   buff.frameBuffer.clearColor = buff.properties.background
 
-proc shapeId(shape: Shape): uint16 =
-  shape.kind.ord.uint16 shl (31u16 - 4u16)  # We use 3 bits for all of our shapes
+proc shapeId(shape: Shape): uint32 =
+  shape.kind.ord.uint32 shl (31u16 - 4u16)  # We use 3 bits for all of our shapes, 1 for "isWhiteSpace"
 
 proc uploadRect(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool =
   let prop = buff.cachedProperties[int shape.props]
@@ -350,7 +351,13 @@ proc uploadGraphicsMode(buff: var Buffer) =
   for i, shape in buff.shapes.pairs:
     case shape.kind
     of Character:
-      rendered = buff.uploadRune(scrSize, shape.x, shape.y, Glyph(rune: shape.rune, properties: shape.props), i)[0] or rendered
+      rendered = buff.uploadRune(
+        scrSize, -1 + shape.x / scrSize.x,
+        1 - shape.y / scrSize.y,
+        Glyph(rune: shape.rune, properties: shape.props),
+        i,
+        shape.scale
+      )[0] or rendered
     of Rectangle:
       rendered = buff.uploadRect(scrSize, shape, i) or rendered
 
@@ -514,10 +521,11 @@ proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: Gl
       y: y,
       kind: Character,
       rune: rune,
-      props: propInd
+      props: propInd,
+      scale: scale,
     )
     let entry = buff.atlas.runeEntry(rune)
-    x += entry.rect.x
+    x += entry.rect.w * scale
 
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32) =
   buff.drawText(s, x, y, rot, scale, buff.properties)
@@ -599,34 +607,47 @@ when isMainModule:
     buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"White", blinkSpeed: 1f))
     buff.put("\n>")
 
+  var textScale = 1f
 
   proc update(dt: float32) =
-    if isTextInputActive():
-      if inputText().len > 0:
-        buff.put inputText()
-        setInputText("")
-      if KeyCodeReturn.isDownRepeating():
-        buff.put("\n>")
-    if KeyCodeUp.isDownRepeating():
-      buff.scrollUp()
-    if KeyCodeDown.isDownRepeating():
-      buff.scrollDown()
+    if buff.mode == Text:
+      if isTextInputActive():
+        if inputText().len > 0:
+          buff.put inputText()
+          setInputText("")
+        if KeyCodeReturn.isDownRepeating():
+          buff.put("\n>")
+      if KeyCodeUp.isDownRepeating():
+        buff.scrollUp()
+      if KeyCodeDown.isDownRepeating():
+        buff.scrollDown()
 
-    if KeyCodeInsert.isDownRepeating():
-      buff.mode = Graphics
-      if buff.shapes.len == 0:
-        buff.drawBox(10, 10, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
-        buff.drawBox(20, 20, 100, GlyphProperties(foreground: parseHtmlColor"White"))
-        buff.drawBox(30, 30, 80, GlyphProperties(foreground: parseHtmlColor"Blue", shakeStrength: 5f, shakeSpeed: 4f))
-        buff.drawBox(120, 10, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
-        buff.drawBox(10, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
-        buff.drawBox(120, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+      if KeyCodeInsert.isDownRepeating():
+        buff.mode = Graphics
+    else:
+      buff.shapes.setLen(0)
+      buff.drawBox(10, 10, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+      buff.drawBox(20, 20, 100, GlyphProperties(foreground: parseHtmlColor"White"))
+      buff.drawBox(30, 30, 80, GlyphProperties(foreground: parseHtmlColor"Blue", shakeStrength: 5f, shakeSpeed: 4f))
+      buff.drawBox(120, 10, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+      buff.drawBox(10, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+      buff.drawBox(120, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
 
-    if KeyCodeDelete.isDownRepeating():
-      buff.mode = Text
+      let
+        scaledX = getMousePos().x.float32
+        scaledY = getMousePos().y.float32
+
+      buff.drawText("Hello", scaledX * 2, scaledY * 2, 0, textScale, GlyphProperties(foreground: parseHtmlColor"Blue", shakeStrength: 5f, shakeSpeed: 4f))
+      textScale += getMouseScroll().float32 * 10 * dt
+
+      if KeyCodeInsert.isDownRepeating():
+        buff.mode = Text
+
+
+
 
     buff.upload(dt)
 
   proc draw =
     buff.render()
-  initTruss("Something", ivec2(buff.pixelWidth, buff.pixelHeight), init, update, draw, vsync = true)
+  initTruss("Something", ivec2(1280, 720), init, update, draw, vsync = true, flags = {})

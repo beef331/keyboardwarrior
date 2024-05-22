@@ -35,6 +35,29 @@ layout(std430, binding = 2) buffer theFontData{
 flat in vec4 fg;
 flat in vec4 bg;
 flat in uint fontIndex;
+
+vec4 textRender(){
+  uint mask = (15 << 27) ^ 0xffffffff; // 27 cause we have 0b0111(16).... for shapes
+  uint realIndex = mask & fontIndex;
+  float whiteSpace = float(fontIndex >> 31 & 1);
+  vec2 offset = fontData[fontIndex - 1].xy;
+  vec2 size = fontData[fontIndex - 1].zw;
+  vec2 texSize = vec2(textureSize(fontTex, 0));
+  vec4 col = texture(fontTex, offset / texSize + fUv * (size / texSize));
+  return mix(bg, fg, col.a * (1 - whiteSpace));
+}
+
 void main() {
-  frag_color = fg;
+  uint kind = (fontIndex >> 27) & 7; // & 0b0111 gets the shape kind
+  switch(kind){
+    case 0: // Text
+      frag_color = textRender();
+      break;
+    case 1: // Rectangle
+      frag_color = fg;
+      break;
+    default:
+      frag_color = vec4(kind);
+      break;
+  }
 }
