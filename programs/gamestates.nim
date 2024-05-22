@@ -79,6 +79,7 @@ proc enterProgram*(gameState: var GameState, program: sink string) =
   gameState.activeProgram = program
 
 proc exitProgram*(gameState: var GameState) =
+  gameState.programs[gameState.activeProgram].onExit(gameState)
   gameState.activeProgram = ""
   gameState.buffer.put ">"
 
@@ -197,9 +198,10 @@ proc update*(gameState: var GameState, dt: float) =
   if gameState.shipStack.len > 0:
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
+  if gameState.buffer.mode == Text:
+    gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
+      gameState.buffer.put gameState.lastFpsBuffer
 
-  gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
-    gameState.buffer.put gameState.lastFpsBuffer
 
 
   if not gamestate.world.isReady:
@@ -249,8 +251,9 @@ proc update*(gameState: var GameState, dt: float) =
       if KeyCodeDown.isDownRepeating():
         gameState.buffer.scrollDown()
     else:
-      gameState.buffer.clearTo(gameState.programY)
-      gameState.buffer.cameraPos = gameState.programY
+      if gameState.buffer.mode == Text:
+        gameState.buffer.clearTo(gameState.programY)
+        gameState.buffer.cameraPos = gameState.programY
       gameState.programs[gameState.activeProgram].update(gamestate, dt, true)
 
     if gameState.inProgram:
@@ -258,13 +261,16 @@ proc update*(gameState: var GameState, dt: float) =
         gameState.exitProgram()
 
 
+
   let chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
   gamestate.fpsX = gameState.buffer.lineWidth - chars.len
   gamestate.fpsY = gameState.buffer.cameraPos
 
-
-  gameState.buffer.withPos(gameState.fpsX, gamestate.fpsY):
-    gameState.lastFpsBuffer = gameState.buffer.fetchAndPut(chars, false)
+  if gameState.buffer.mode == Text:
+    gameState.buffer.withPos(gameState.fpsX, gamestate.fpsY):
+      gameState.lastFpsBuffer = gameState.buffer.fetchAndPut(chars, false)
+  else:
+    gameState.buffer.drawText(chars, 0f, gameState.buffer.pixelHeight.float32 * 2)
 
   gameState.buffer.upload(dt)
   setInputText("")

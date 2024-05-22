@@ -264,6 +264,8 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
       wh: wh
       )
 
+proc clearShapes*(buff: var Buffer) = buff.shapes.setLen(0)
+
 proc uploadTextMode(buff: var Buffer) =
   assert buff.mode == Text
   let scrSize =
