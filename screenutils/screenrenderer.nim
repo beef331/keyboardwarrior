@@ -31,6 +31,8 @@ type
     fg: int32
     bg: int32
     fontIndex: uint32
+      ## MSB is used for "isWhiteSpace"
+      ## In Graphics mode the last 4 bits are used for ShapeKind
     _: int32 # Reserved
     xyzr: Vec4
     wh: Vec4
@@ -39,7 +41,6 @@ type
 
   UiRenderTarget = object
     model: InstancedModel[RenderInstance]
-    shader: Shader
 
   GlyphProperties* = object
     shakeSpeed*: float32
@@ -136,6 +137,8 @@ const
   relativeTextShaderPath {.strDefine.} = ""
   guiVert = ShaderPath relativeTextShaderPath / "text.vert.glsl"
   guiFrag = ShaderPath relativeTextShaderPath / "text.frag.glsl"
+  shapeFrag = ShaderPath relativeTextShaderPath / "shape.frag.glsl"
+
 
 proc recalculateBuffer*(buff: var Buffer) =
   let charEntry = buff.atlas.runeEntry(Rune('W'))
@@ -152,6 +155,7 @@ proc recalculateBuffer*(buff: var Buffer) =
 proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true) =
   buff.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
   buff.textShader = loadShader(guiVert, guiFrag)
+  buff.graphicShader = loadShader(guiVert, shapeFrag)
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
   modelData.append [0u32, 1, 2, 0, 2, 3].items
@@ -207,9 +211,60 @@ proc toggleFrameBuffer*(buff: var Buffer) =
 
 proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 
-proc uploadTextMode(buff: var Buffer, dt: float32) =
+proc propIsVisible(buff: Buffer, prop: GlyphProperties): bool =
+  prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0
+
+proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int): (bool, Rune, Vec2) =
+  let
+    prop = buff.cachedProperties[int glyph.properties]
+    rune =
+      if glyph.rune == Rune(0):
+        Rune('+')
+      else:
+        glyph.rune
+    entry = buff.atlas.runeEntry(rune)
+    theFg = buff.getColorIndex(prop.foreground)
+    theBg = buff.getColorIndex(prop.background)
+    size =
+      if entry.rect.w == 0:
+        buff.atlas.runeEntry(Rune('+')).rect.wh / scrSize
+      else:
+        entry.rect.wh / scrSize
+  result = (
+    buff.propIsVisible(prop) and glyph.rune != Rune(0),
+    rune,
+    size
+  )
+  if result[0]:
+    let
+      sineOffset = sin((buff.time + x) * prop.sineSpeed) * prop.sineStrength / scrSize.y
+      shakeOffsetX =
+        if prop.shakeStrength > 0:
+          buff.noise.evaluate((buff.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength / scrSize.y
+        else:
+          0
+      shakeOffsetY =
+        if prop.shakeStrength > 0:
+          buff.noise.evaluate((buff.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength / scrSize.y
+        else:
+          0
+
+    let
+      whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
+      id = entry.id.uint32 or whiteSpaceBit
+      xyzr = vec4(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0, 0)
+      wh = vec4(size.x, size.y, 0, 0)
+
+    buff.fontTarget.model.push FontRenderObj(
+      fg: theFg,
+      bg: theBg,
+      fontIndex: id,
+      xyzr: xyzr,
+      wh: wh
+      )
+
+proc uploadTextMode(buff: var Buffer) =
   assert buff.mode == Text
-  buff.time += dt
   let scrSize =
     if buff.useFrameBuffer:
       vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
@@ -223,50 +278,8 @@ proc uploadTextMode(buff: var Buffer, dt: float32) =
     for xPos, glyph in buff.lines[ind]:
       if xPos > buff.lineWidth:
         break
-      let
-        prop = buff.cachedProperties[int glyph.properties]
-        rune =
-          if glyph.rune == Rune(0):
-            Rune('+')
-          else:
-            glyph.rune
-        entry = buff.atlas.runeEntry(rune)
-        theFg = buff.getColorIndex(prop.foreground)
-        theBg = buff.getColorIndex(prop.background)
-        size =
-          if entry.rect.w == 0:
-            buff.atlas.runeEntry(Rune('+')).rect.wh / scrSize
-          else:
-            entry.rect.wh / scrSize
-
-      if (prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0) and glyph.rune != Rune(0):
-        let
-          sineOffset = sin((buff.time + x) * prop.sineSpeed) * prop.sineStrength * size.y
-          shakeOffsetX =
-            if prop.shakeStrength > 0:
-              buff.noise.evaluate((buff.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.x
-            else:
-              0
-          shakeOffsetY =
-            if prop.shakeStrength > 0:
-              buff.noise.evaluate((buff.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength * size.y
-            else:
-              0
-        rendered = true
-
-        let
-          whiteSpaceBit = rune.isWhiteSpace.ord.uint32 shl 31
-          id = entry.id.uint32 or whiteSpaceBit
-          xyzr = vec4(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0, 0)
-          wh = vec4(size.x, size.y, 0, 0)
-
-        buff.fontTarget.model.push FontRenderObj(
-          fg: theFg,
-          bg: theBg,
-          fontIndex: id,
-          xyzr: xyzr,
-          wh: wh
-          )
+      var (thisRendered, rune, size) = buff.uploadRune(scrSize, x, y, glyph, ind)
+      rendered = thisRendered or rendered
 
       if rune == Rune('\n'):
         break
@@ -286,15 +299,78 @@ proc uploadTextMode(buff: var Buffer, dt: float32) =
     buff.fontTarget.model.reuploadSsbo()
   buff.frameBuffer.clearColor = buff.properties.background
 
-proc uploadGraphicsMode(buff: var Buffer, dt: float32) =
+proc shapeId(shape: Shape): uint16 =
+  shape.kind.ord.uint16 shl (31u16 - 4u16)  # We use 3 bits for all of our shapes
+
+proc uploadRect(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool =
+  let prop = buff.cachedProperties[int shape.props]
+  result = buff.propIsVisible(prop)
+  if result:
+    let
+      theFg = buff.getColorIndex(prop.foreground)
+      theBg = buff.getColorIndex(prop.background)
+      size = vec2(shape.rectW, shape.rectH) / scrSize
+      x = -1f + shape.x / scrSize.x
+      y = 1f - shape.y / scrSize.y - size.y
+
+    let
+      sineOffset = sin((buff.time + x) * prop.sineSpeed) * prop.sineStrength / scrSize.y
+      shakeOffsetX =
+        if prop.shakeStrength > 0:
+          buff.noise.evaluate((buff.time + x * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength / scrSize.y
+        else:
+          0
+      shakeOffsetY =
+        if prop.shakeStrength > 0:
+          buff.noise.evaluate((buff.time + y * ind.float) * prop.shakeSpeed, float32 ind) * prop.shakeStrength / scrSize.y
+        else:
+          0
+
+      xyzr = vec4(x + shakeOffsetX, y + sineOffset + shakeOffsetY, 0, 0)
+      wh = vec4(size.x, size.y, 0, 0)
+
+    buff.fontTarget.model.push FontRenderObj(
+      fg: theFg,
+      bg: theBg,
+      fontIndex: shape.shapeId,
+      xyzr: xyzr,
+      wh: wh
+      )
+
+proc uploadGraphicsMode(buff: var Buffer) =
   assert buff.mode == Graphics
+  let scrSize =
+    if buff.useFrameBuffer:
+      vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
+    else:
+      vec2 screenSize()
+
+  buff.fontTarget.model.clear()
+  var rendered: bool
+  for i, shape in buff.shapes.pairs:
+    case shape.kind
+    of Character:
+      rendered = buff.uploadRune(scrSize, shape.x, shape.y, Glyph(rune: shape.rune, properties: shape.props), i)[0] or rendered
+    of Rectangle:
+      rendered = buff.uploadRect(scrSize, shape, i) or rendered
+
+    else:
+      discard
+
+  if rendered:
+    if buff.dirtiedColors:
+      buff.colors.copyTo buff.colorSsbo
+      buff.dirtiedColors = false
+
+    buff.fontTarget.model.reuploadSsbo()
 
 proc upload*(buff: var Buffer, dt: float32) =
+  buff.time += dt
   case buff.mode
   of Text:
-    buff.uploadTextMode(dt)
+    buff.uploadTextMode()
   of Graphics:
-    buff.uploadGraphicsMode(dt)
+    buff.uploadGraphicsMode()
 
 proc render*(buff: Buffer) =
   var old: (Glint, Glint, GlSizeI, GlSizeI)
@@ -305,13 +381,25 @@ proc render*(buff: Buffer) =
     buff.frameBuffer.bindBuffer()
   buff.colorSsbo.bindBuffer(1)
   buff.atlas.ssbo.bindBuffer(2)
-  with buff.textShader:
-    glEnable(GlBlend)
-    glBlendFunc(GlOne, GlOneMinusSrcAlpha)
 
+
+  case buff.mode
+  of Text:
+    buff.textShader.makeActive()
     buff.textShader.setUniform("fontTex", buff.atlas.texture)
-    buff.fontTarget.model.render()
-    glDisable(GlBlend)
+
+  of Graphics:
+    buff.graphicShader.makeActive()
+    buff.graphicShader.setUniform("fontTex", buff.atlas.texture, false)
+
+  glEnable(GlBlend)
+  glBlendFunc(GlOne, GlOneMinusSrcAlpha)
+
+  buff.fontTarget.model.render()
+  glDisable(GlBlend)
+
+  Shader(Gluint(0)).makeActive()
+
   if buff.useFrameBuffer:
     glViewport(old[0], old[1], old[2], old[3])
     unbindFrameBuffer()
@@ -377,6 +465,9 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
     buff.lines.add Line()
 
   let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+  if propInd == uint16 buff.cachedProperties.len:
+    buff.propToInd[props] = propInd
+    buff.cachedProperties.add props
 
   for rune in s.chr:
     when getBuffer:
@@ -387,9 +478,7 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
       buff.cursorX = 0
       inc buff.cursorY
     elif buff.cursorX < buff.lineWidth:
-      if propInd == uint16 buff.cachedProperties.len:
-        buff.propToInd[props] = propInd
-        buff.cachedProperties.add props
+
 
       buff.lines[buff.cursorY].glyphs[buff.cursorX] =
         when rune is Rune:
@@ -414,6 +503,10 @@ proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true) =
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: GlyphProperties) =
   assert buff.mode == Graphics
   let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+  if propInd == uint16 buff.cachedProperties.len:
+    buff.propToInd[props] = propInd
+    buff.cachedProperties.add props
+
   var (x, y) = (x, y)
   for rune in s.runes:
     buff.shapes.add Shape(
@@ -432,8 +525,22 @@ proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32) =
 proc drawText*(buff: var Buffer, s: string, x, y: float32) =
   buff.drawText(s, x, y, 0, 1, buff.properties)
 
-proc drawLine*(buff: var Buffer, points: openArray[Vec2], width: float32, props: GlyphProperties) =
-  assert buff.mode == Graphics
+proc drawRect*(buff: var Buffer, x, y, width, height: float32, props: GlyphProperties) =
+  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+  if propInd == uint16 buff.cachedProperties.len:
+    buff.propToInd[props] = propInd
+    buff.cachedProperties.add props
+
+  buff.shapes.add Shape(kind: Rectangle, x: x, y: y, rectW: width, rectH: height, props: propInd)
+
+proc drawRect*(buff: var Buffer, x, y, width, height: float32) =
+  buff.drawRect(x, y, width, height, buff.properties)
+
+proc drawBox*(buff: var Buffer, x, y, width: float32, props: GlyphProperties) =
+  buff.drawRect(x, y, width, width, props)
+
+proc drawBox*(buff: var Buffer, x, y, width: float32) =
+  buff.drawRect(x, y, width, width, buff.properties)
 
 proc fetchAndPut*(buff: var Buffer, s: string, moveCamera = true): seq[Glyph] =
   put buff, s, buff.properties, moveCamera, true
@@ -483,11 +590,11 @@ when isMainModule:
     fontPath = "../PublicPixel.ttf"
 
   proc init =
-    buff.initResources(fontPath)
+    buff.initResources(fontPath, seedNoise = false)
     startTextInput(default(inputs.Rect), "")
-    buff.put("hello world!", GlyphProperties(foreground: parseHtmlColor"Green", background: parseHtmlColor"Yellow", sineSpeed: 5f, sineStrength: 1f))
+    buff.put("hello world!", GlyphProperties(foreground: parseHtmlColor"Green", background: parseHtmlColor"Yellow", sineSpeed: 5f, sineStrength: 10f))
     buff.put(" bleh \n\n", GlyphProperties(foreground: parseHtmlColor"Green"))
-    buff.put("\nHello travllllllerrrrs", GlyphProperties(foreground: parseHtmlColor"Purple", background: parseHtmlColor"Beige", shakeSpeed: 5f, shakeStrength: 0.25f))
+    buff.put("\nHello travllllllerrrrs", GlyphProperties(foreground: parseHtmlColor"Purple", background: parseHtmlColor"Beige", shakeSpeed: 5f, shakeStrength: 10f))
     buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"Red", blinkSpeed: 5f))
     buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"White", blinkSpeed: 1f))
     buff.put("\n>")
@@ -504,6 +611,20 @@ when isMainModule:
       buff.scrollUp()
     if KeyCodeDown.isDownRepeating():
       buff.scrollDown()
+
+    if KeyCodeInsert.isDownRepeating():
+      buff.mode = Graphics
+      if buff.shapes.len == 0:
+        buff.drawBox(10, 10, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+        buff.drawBox(20, 20, 100, GlyphProperties(foreground: parseHtmlColor"White"))
+        buff.drawBox(30, 30, 80, GlyphProperties(foreground: parseHtmlColor"Blue", shakeStrength: 5f, shakeSpeed: 4f))
+        buff.drawBox(120, 10, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+        buff.drawBox(10, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+        buff.drawBox(120, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
+
+    if KeyCodeDelete.isDownRepeating():
+      buff.mode = Text
+
     buff.upload(dt)
 
   proc draw =

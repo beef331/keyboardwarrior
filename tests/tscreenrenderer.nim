@@ -40,8 +40,8 @@ proc init =
   genTest("basictest", 3):
     buffer.put("This is a test\n")
     buffer.put("Hello\n\n", GlyphProperties(foreground: parseHtmlColor"red"))
-    buffer.put("Hello\n\n", GlyphProperties(foreground: parseHtmlColor"orange", sinestrength: 0.3f, sineSpeed: 10))
-    buffer.put("Hello\n", GlyphProperties(foreground: parseHtmlColor"cyan", shakeSpeed: 10f, shakeStrength: 0.4))
+    buffer.put("Hello\n\n", GlyphProperties(foreground: parseHtmlColor"orange", sinestrength: 10f, sineSpeed: 10))
+    buffer.put("Hello\n", GlyphProperties(foreground: parseHtmlColor"cyan", shakeSpeed: 10f, shakeStrength: 10))
 
   genTest("tables", 0):
     var data: seq[tuple[name: string, age: int, favouritePet: string]] = @[
