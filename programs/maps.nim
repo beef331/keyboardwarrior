@@ -36,7 +36,9 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
             GlyphProperties(foreground: parseHtmlColor"red")
           else:
             gameState.buffer.properties
+
       gameState.buffer.drawBox(x, y, 32, props = color)
+      gameState.buffer.drawText(entry.name, x, y + 64f, 0, scale = 0.3f, props = color)
 
 
 proc sensorHandler(gameState: var GameState, input: string) =
