@@ -47,6 +47,18 @@ vec4 textRender(){
   return mix(bg, fg, col.a * (1 - whiteSpace));
 }
 
+float rectangle(vec2 samplePosition, vec2 halfSize){
+    vec2 componentWiseEdgeDistance = abs(samplePosition) - halfSize;
+    float outsideDistance = length(max(componentWiseEdgeDistance, 0));
+    float insideDistance = min(max(componentWiseEdgeDistance.x, componentWiseEdgeDistance.y), 0);
+    return outsideDistance + insideDistance;
+}
+
+float circle(vec2 samplePosition, float radius){
+    //get distance from center and grow it according to radius
+    return length(samplePosition) - radius;
+}
+
 void main() {
   uint kind = (fontIndex >> 27) & 7; // & 0b0111 gets the shape kind
   switch(kind){
@@ -56,8 +68,17 @@ void main() {
     case 1: // Rectangle
       frag_color = fg;
       break;
+    case 2: // Outlined Rectangle
+      frag_color = fg * float(abs(rectangle(fUv - 0.5, vec2(0.5))) < 0.01);
+      break;
+    case 3: // Ellipse
+      frag_color = fg * abs(circle(fUv - 0.5, 0.48));
+      break;
+    case 4: // Outlined Ellipse
+      frag_color = fg * float(abs(circle(fUv - 0.5, 0.48)) < 0.01);
+      break;
     default:
-      frag_color = vec4(kind);
+      frag_color = vec4(kind / 7, 0, 0, 1);
       break;
   }
 }

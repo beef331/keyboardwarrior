@@ -77,7 +77,9 @@ type
   ShapeKind* = enum
     Character # Always needs to be first
     Rectangle
+    OutlineRectangle
     Ellipse
+    OutlineEllipse
     LinePath
 
   Shape* = object
@@ -85,9 +87,9 @@ type
     scale: float32
     props: uint16
     case kind: ShapeKind
-    of Rectangle:
+    of Rectangle, OutlineRectangle:
       rectW, rectH: float32
-    of Ellipse:
+    of Ellipse, OutlineEllipse:
       eRadius1, eRadius2: float32
     of LinePath:
       model: Model
@@ -305,14 +307,20 @@ proc uploadTextMode(buff: var Buffer) =
 proc shapeId(shape: Shape): uint32 =
   shape.kind.ord.uint32 shl (31u16 - 4u16)  # We use 3 bits for all of our shapes, 1 for "isWhiteSpace"
 
-proc uploadRect(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool =
+proc uploadShape(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool =
   let prop = buff.cachedProperties[int shape.props]
   result = buff.propIsVisible(prop)
   if result:
     let
       theFg = buff.getColorIndex(prop.foreground)
       theBg = buff.getColorIndex(prop.background)
-      size = vec2(shape.rectW, shape.rectH) / scrSize
+      shapeSize =
+        case range[Rectangle..OutlineEllipse](shape.kind)
+        of Rectangle, OutlineRectangle:
+          vec2(shape.rectW, shape.rectH)
+        of Ellipse, OutlineEllipse:
+          vec2(shape.eRadius1, shape.eRadius2)
+      size = shapeSize / scrSize
       x = -1f + shape.x / scrSize.x
       y = 1f - shape.y / scrSize.y - size.y
 
@@ -360,8 +368,8 @@ proc uploadGraphicsMode(buff: var Buffer) =
         i,
         shape.scale
       )[0] or rendered
-    of Rectangle:
-      rendered = buff.uploadRect(scrSize, shape, i) or rendered
+    of Rectangle, OutlineRectangle, Ellipse, OutlineEllipse:
+      rendered = buff.uploadShape(scrSize, shape, i) or rendered
 
     else:
       discard
@@ -535,22 +543,47 @@ proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32) =
 proc drawText*(buff: var Buffer, s: string, x, y: float32) =
   buff.drawText(s, x, y, 0, 1, buff.properties)
 
-proc drawRect*(buff: var Buffer, x, y, width, height: float32, props: GlyphProperties) =
+proc drawRect*(buff: var Buffer, x, y, width, height: float32, props: GlyphProperties, outline = false) =
   let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
   if propInd == uint16 buff.cachedProperties.len:
     buff.propToInd[props] = propInd
     buff.cachedProperties.add props
+  buff.shapes.add:
+    if outline:
+      Shape(kind: OutlineRectangle, x: x, y: y, rectW: width, rectH: height, props: propInd)
+    else:
+      Shape(kind: Rectangle, x: x, y: y, rectW: width, rectH: height, props: propInd)
 
-  buff.shapes.add Shape(kind: Rectangle, x: x, y: y, rectW: width, rectH: height, props: propInd)
+proc drawRect*(buff: var Buffer, x, y, width, height: float32, outline = false) =
+  buff.drawRect(x, y, width, height, buff.properties, outline)
 
-proc drawRect*(buff: var Buffer, x, y, width, height: float32) =
-  buff.drawRect(x, y, width, height, buff.properties)
+proc drawBox*(buff: var Buffer, x, y, width: float32, props: GlyphProperties, outline = false) =
+  buff.drawRect(x, y, width, width, props, outline)
 
-proc drawBox*(buff: var Buffer, x, y, width: float32, props: GlyphProperties) =
-  buff.drawRect(x, y, width, width, props)
+proc drawBox*(buff: var Buffer, x, y, width: float32, outline = false) =
+  buff.drawRect(x, y, width, width, buff.properties, outline)
 
-proc drawBox*(buff: var Buffer, x, y, width: float32) =
-  buff.drawRect(x, y, width, width, buff.properties)
+proc drawEllipse*(buff: var Buffer, x, y, majorRadius, minorRadius: float32, props: GlyphProperties, outline = false) =
+  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
+  if propInd == uint16 buff.cachedProperties.len:
+    buff.propToInd[props] = propInd
+    buff.cachedProperties.add props
+  buff.shapes.add:
+    if outline:
+      Shape(kind: OutlineEllipse, x: x, y: y, eRadius1: minorRadius, eRadius2: majorRadius, props: propInd)
+    else:
+      Shape(kind: Ellipse, x: x, y: y, eRadius1: minorRadius, eRadius2: majorRadius, props: propInd)
+
+proc drawEllipse*(buff: var Buffer, x, y, majorRadius, minorRadius: float32, outline = false) =
+  buff.drawEllipse(x, y, majorRadius, minorRadius, buff.properties, outline)
+
+proc drawCircle*(buff: var Buffer, x, y, radius: float32, props: GlyphProperties, outline = false) =
+  buff.drawEllipse(x, y, radius, radius, props, outline)
+
+proc drawCircle*(buff: var Buffer, x, y, radius: float32, outline = false) =
+  buff.drawEllipse(x, y, radius, radius, buff.properties, outline)
+
+
 
 proc fetchAndPut*(buff: var Buffer, s: string, moveCamera = true): seq[Glyph] =
   put buff, s, buff.properties, moveCamera, true

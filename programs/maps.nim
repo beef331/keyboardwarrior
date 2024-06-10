@@ -20,11 +20,12 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
     gamestate.buffer.mode = Graphics
     let player = gameState.world.player
     gameState.buffer.drawBox(
-      gameState.buffer.pixelWidth.float32,
-      gameState.buffer.pixelHeight.float32,
+      gameState.buffer.pixelWidth.float32 - 32,
+      gameState.buffer.pixelHeight.float32 - 32,
       32,
       props = GlyphProperties(foreground: parseHtmlColor"yellow", blinkSpeed: 3f)
     )
+
     for entry in gameState.world.nonPlayerEntities:
       let
         xDist = entry.x - player.x
@@ -40,6 +41,21 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
       gameState.buffer.drawBox(x, y, 32, props = color)
       gameState.buffer.drawText(entry.name, x, y + 64f, 0, scale = 0.3f, props = color)
 
+      gameState.buffer.drawBox(
+        gameState.buffer.pixelWidth.float32 - 1000/2,
+        gameState.buffer.pixelHeight.float32 - 1000/2,
+        1000,
+        props = GlyphProperties(foreground: parseHtmlColor"orange"),
+        outline = true
+      )
+
+      gameState.buffer.drawCircle(
+        gameState.buffer.pixelWidth.float32 - 1000/2,
+        gameState.buffer.pixelHeight.float32 - 1000/2,
+        1000,
+        props = GlyphProperties(foreground: parseHtmlColor"Blue"),
+        outline = true
+      )
 
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Map":
