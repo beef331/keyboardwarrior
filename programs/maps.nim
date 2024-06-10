@@ -57,6 +57,23 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
         outline = true
       )
 
+      gameState.buffer.drawEllipse(
+        gameState.buffer.pixelWidth.float32 - 500/2,
+        gameState.buffer.pixelHeight.float32 - 1000/2,
+        1000,
+        500,
+        props = GlyphProperties(foreground: parseHtmlColor"Grey"),
+        outline = true
+      )
+
+      gameState.buffer.drawEllipse(
+        gameState.buffer.pixelWidth.float32 - 500/2,
+        gameState.buffer.pixelHeight.float32 - 250/2,
+        250,
+        500,
+        props = GlyphProperties(foreground: parseHtmlColor"red"),
+      )
+
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Map":
     gameState.enterProgram("Map")

@@ -72,7 +72,7 @@ void main() {
       frag_color = fg * float(abs(rectangle(fUv - 0.5, vec2(0.5))) < 0.01);
       break;
     case 3: // Ellipse
-      frag_color = fg * abs(circle(fUv - 0.5, 0.48));
+      frag_color = fg * float(circle(fUv - 0.5, 0.5) <= 0);
       break;
     case 4: // Outlined Ellipse
       frag_color = fg * float(abs(circle(fUv - 0.5, 0.48)) < 0.01);
