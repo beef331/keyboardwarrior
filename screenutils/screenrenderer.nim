@@ -230,9 +230,9 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
     theBg = buff.getColorIndex(prop.background)
     size =
       if entry.rect.w == 0:
-        buff.atlas.runeEntry(Rune('+')).rect.wh / scrSize * scale
+        buff.atlas.runeEntry(Rune('+')).rect.wh * scale / scrSize
       else:
-        entry.rect.wh / scrSize * scale
+        entry.rect.wh * scale / scrSize
   result = (
     buff.propIsVisible(prop) and glyph.rune != Rune(0),
     rune,
@@ -309,6 +309,7 @@ proc shapeId(shape: Shape): uint32 =
 
 proc uploadShape(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool =
   let prop = buff.cachedProperties[int shape.props]
+  let scrSize = scrSize / 2
   result = buff.propIsVisible(prop)
   if result:
     let
@@ -321,8 +322,8 @@ proc uploadShape(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool 
         of Ellipse, OutlineEllipse:
           vec2(shape.eRadius1, shape.eRadius2)
       size = shapeSize / scrSize
-      x = -1f + shape.x / scrSize.x
-      y = 1f - shape.y / scrSize.y - size.y
+      x = -1f + (shape.x - shapeSize.x / 2) / scrSize.x
+      y = 1f - (shape.y + shapeSize.y / 2) / scrSize.y
 
     let
       sineOffset = sin((buff.time + x) * prop.sineSpeed) * prop.sineStrength / scrSize.y
@@ -362,8 +363,8 @@ proc uploadGraphicsMode(buff: var Buffer) =
     case shape.kind
     of Character:
       rendered = buff.uploadRune(
-        scrSize, -1 + shape.x / scrSize.x,
-        1 - shape.y / scrSize.y,
+        scrSize, -1 + (shape.x / scrSize.x) * 2,
+        1 - (shape.y / scrSize.y) * 2,
         Glyph(rune: shape.rune, properties: shape.props),
         i,
         shape.scale
@@ -535,7 +536,7 @@ proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: Gl
       scale: scale,
     )
     let entry = buff.atlas.runeEntry(rune)
-    x += entry.rect.w * scale
+    x += entry.rect.w * scale / 2
 
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32) =
   buff.drawText(s, x, y, rot, scale, buff.properties)

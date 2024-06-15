@@ -35,7 +35,7 @@ vec2 barrelUv(vec2 uv){
 void main() {
   vec2 texSize = textureSize(tex, 0);
   vec2 screenTexelSize = 4 / screenSize;
-  vec2 uv = barrelUv(fUv);
+  vec2 uv = fUv;//barrelUv(fUv);
   float closeness = mod(uv.y, screenTexelSize.y) / screenTexelSize.y;
 
   frag_colour = texture(tex, uv) * pow(closeness, 0.2);

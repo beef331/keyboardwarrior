@@ -221,10 +221,6 @@ proc update*(world: var World, dt: float32) =
   for toMove in world.activeChunk.entities.reposition():
     discard toMove # TODO: Move this to the next chunk
 
-iterator nonPlayerEntities*(world: World): lent SpaceEntity =
-  for i, ent in world.activeChunk.entities.inRangePairs(450, 450, 100, 100):
-    if i != world.player:
-      yield ent
 
 proc player*(world: World): lent SpaceEntity =
   world.activeChunk.entities[world.player]
@@ -279,3 +275,26 @@ proc hasPoweredSystem*(entity: SpaceEntity, sys: SystemKind): bool =
   for system in entity.poweredSystemsOf({sys}):
     return true
 
+iterator nonPlayerEntities*(world: World): lent SpaceEntity =
+  for i, ent in world.activeChunk.entities.inRangePairs(450, 450, 100, 100):
+    if i != world.player:
+      yield ent
+
+proc sensorRange*(ent: SpaceEntity): int =
+  for sys in ent.poweredSystemsOf({Sensor}):
+    result = max(sys.sensorRange, result)
+
+iterator allInSensors*(world: World, entity: string): lent SpaceEntity =
+  let
+    filtered = world.activeChunk.nameToEntityInd[InsensitiveString entity]
+    ent = world.activeChunk.entities[filtered]
+    sensorRange = ent.sensorRange()
+    x = clamp(ent.x.int - sensorRange, 0, 1000)
+    y = clamp(ent.y.int - sensorRange, 0, 1000)
+    sqrRange = sensorRange * sensorRange
+
+  for i, otherEnt in world.activeChunk.entities.inRangePairs(x, y, sensorRange, sensorRange):
+    if i != filtered:
+      let sqrDist = int (ent.x - otherEnt.x) * (ent.x - otherEnt.x) + (ent.y - otherEnt.y) * (ent.y - otherEnt.y)
+      if sqrDist <= sqrRange:
+        yield otherEnt
