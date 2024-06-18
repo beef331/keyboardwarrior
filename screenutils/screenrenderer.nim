@@ -217,7 +217,7 @@ proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 proc propIsVisible(buff: Buffer, prop: GlyphProperties): bool =
   prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0
 
-proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int, scale = 1f32): (bool, Rune, Vec2) =
+proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int, scale = 1f32, offset: static bool = false): (bool, Rune, Vec2) =
   let
     prop = buff.cachedProperties[int glyph.properties]
     rune =
@@ -233,6 +233,12 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
         buff.atlas.runeEntry(Rune('+')).rect.wh * scale / scrSize
       else:
         entry.rect.wh * scale / scrSize
+
+  when offset:
+    let
+      x = x - size.x / 2
+      y = y - size.y / 2
+
   result = (
     buff.propIsVisible(prop) and glyph.rune != Rune(0),
     rune,
@@ -307,6 +313,12 @@ proc uploadTextMode(buff: var Buffer) =
 proc shapeId(shape: Shape): uint32 =
   shape.kind.ord.uint32 shl (31u16 - 4u16)  # We use 3 bits for all of our shapes, 1 for "isWhiteSpace"
 
+proc offsetPos(pos, size, scrSize: Vec2): Vec2 =
+  vec2(
+    -1f + (pos.x - size.x / 2) / scrSize.x,
+    1f - (pos.y + size.y / 2) / scrSize.y
+  )
+
 proc uploadShape(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool =
   let prop = buff.cachedProperties[int shape.props]
   let scrSize = scrSize / 2
@@ -322,8 +334,9 @@ proc uploadShape(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool 
         of Ellipse, OutlineEllipse:
           vec2(shape.eRadius1, shape.eRadius2)
       size = shapeSize / scrSize
-      x = -1f + (shape.x - shapeSize.x / 2) / scrSize.x
-      y = 1f - (shape.y + shapeSize.y / 2) / scrSize.y
+      calcPos = vec2(shape.x, shape.y).offsetPos(shapeSize, scrSize)
+      x = calcPos.x
+      y = calcPos.y
 
     let
       sineOffset = sin((buff.time + x) * prop.sineSpeed) * prop.sineStrength / scrSize.y
@@ -367,7 +380,8 @@ proc uploadGraphicsMode(buff: var Buffer) =
         1 - (shape.y / scrSize.y) * 2,
         Glyph(rune: shape.rune, properties: shape.props),
         i,
-        shape.scale
+        shape.scale,
+        offset = true
       )[0] or rendered
     of Rectangle, OutlineRectangle, Ellipse, OutlineEllipse:
       rendered = buff.uploadShape(scrSize, shape, i) or rendered
@@ -535,6 +549,11 @@ proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: Gl
       props: propInd,
       scale: scale,
     )
+    let rune = # Whitespace should not be drawn empty
+      if rune.isWhiteSpace():
+        Rune('+')
+      else:
+        rune
     let entry = buff.atlas.runeEntry(rune)
     x += entry.rect.w * scale / 2
 

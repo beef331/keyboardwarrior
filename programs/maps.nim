@@ -23,49 +23,38 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
     gameState.buffer.drawBox(
       gameState.buffer.pixelWidth.float32 / 2,
       gameState.buffer.pixelHeight.float32 / 2,
-      31,
+      10,
       props = GlyphProperties(foreground: parseHtmlColor"yellow", blinkSpeed: 3f)
     )
-
-    gamestate.buffer.drawRect(
-      gameState.buffer.pixelWidth.float32 / 2, gameState.buffer.pixelHeight.float32 / 2,
-      1f, float32 gameState.buffer.pixelHeight,
-      props = GlyphProperties(foreground: parseHtmlColor"orange")
-    )
-
-
-    gamestate.buffer.drawRect(
-      gameState.buffer.pixelWidth.float32 / 2, gameState.buffer.pixelHeight.float32 / 2,
-      float32 gameState.buffer.pixelWidth, 1f,
-      props = GlyphProperties(foreground: parseHtmlColor"orange")
-    )
-
 
     gameState.buffer.drawText(
       "You",
       gameState.buffer.pixelWidth / 2,
-      gameState.buffer.pixelHeight / 2 + 32,
-      0, 1
+      gameState.buffer.pixelHeight / 2 + 10,
+      0, 0.3
     )
 
     let sensorRange = gameState.activeShipEntity.sensorRange()
 
     for entry in gameState.world.allInSensors(gameState.activeShip):
-      break
       let
         xDist = entry.x - player.x
         yDist = entry.y - player.y
         realDist = sqrt(xDist * xDist + yDist * yDist)
-        x = gameState.buffer.pixelWidth.float32 / 2
-        y = gameState.buffer.pixelHeight.float32 / 2
-        color =
-          if entry.faction == Alliance:
-            GlyphProperties(foreground: parseHtmlColor"red")
-          else:
-            gameState.buffer.properties
+      if realDist <= sensorRange.float32:
+        let
+          offsetPos = vec2(gameState.buffer.pixelWidth.float32 / 2, gameState.buffer.pixelHeight.float32 / 2) +
+            vec2(xDist, yDist).normalize * ((realDist / sensorRange.float32) * gameState.buffer.pixelHeight.float32)
+          x = offsetPos.x
+          y = offsetPos.y
+          color =
+            if entry.faction == Alliance:
+              GlyphProperties(foreground: parseHtmlColor"red")
+            else:
+              gameState.buffer.properties
 
-      gameState.buffer.drawBox(x, y, 32, props = color)
-      gameState.buffer.drawText(entry.name & " " & $abs(min(xDist, yDist)), x, y + 64f, 0, scale = 0.3f, props = color)
+        gameState.buffer.drawBox(x, y, 10, props = color)
+        gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + 10f, 0, scale = 0.3f, props = color)
 
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Map":
