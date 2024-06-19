@@ -395,14 +395,14 @@ iterator inRangePairs*[T](tree: QuadTree[T], x, y, width, height: int): (QuadTre
   let
     x = clamp(x, 0, tree.width)
     y = clamp(x, 0, tree.height)
-    width = min(width, tree.width - x + width)
-    height = min(width, tree.height - y + height)
+    width = min(width, tree.width - x)
+    height = min(height, tree.height - y)
 
   let
-    topLeftPos = (x, y + height)
+    topLeftPos = (x - width, y + height)
     topRightPos = (x + width, y + height)
-    bottomLeftPos = (x, y)
-    bottomRightPos = (x + width, y)
+    bottomLeftPos = (x - width, y - height)
+    bottomRightPos = (x + width, y - height)
 
   var queue {.global.}: seq[int]
   queue.setLen(0)
@@ -412,7 +412,6 @@ iterator inRangePairs*[T](tree: QuadTree[T], x, y, width, height: int): (QuadTre
     tree.nodes[0].children[tree.quadPos(tree.nodes[0], bottomLeftPos)],
     tree.nodes[0].children[tree.quadPos(tree.nodes[0], bottomRightPos)]
     ]
-
   var visited: IntSet
 
   while queue.len > 0:
@@ -432,10 +431,8 @@ iterator inRangePairs*[T](tree: QuadTree[T], x, y, width, height: int): (QuadTre
 
 
 iterator inRange*[T](tree: QuadTree[T], x, y, width, height: int): lent T =
-  for _, val in tree.inRange(x, y, width, height):
+  for _, val in tree.inRangePairs(x, y, width, height):
     yield val
-
-
 
 when isMainModule:
   import std/[enumerate, algorithm]

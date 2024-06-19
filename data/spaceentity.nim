@@ -153,7 +153,7 @@ proc init*(world: var World, playerName, seed: string) =
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
           systems: @[
-            System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+            System(name: "Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
             System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
             System(name: "Warp Core", kind: Generator, powerUsage: 300),
           ]
@@ -169,7 +169,7 @@ proc init*(world: var World, playerName, seed: string) =
       name = selectedName & $world.activeChunk.nameCount.getOrDefault(insStr selectedName)
       x = world.randState.rand(100d..900d)
       y =  world.randState.rand(100d..900d)
-      vel =  world.randState.rand(1d..5d)
+      vel =  world.randState.rand(0.1d..0.3d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
 
@@ -198,7 +198,7 @@ proc init*(world: var World, playerName, seed: string) =
           foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
         ),
         systems: @[
-          System(name: "Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+          System(name: "Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
           System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
           System(name: "Warp Core", kind: Generator, powerUsage: 300),
         ]
@@ -289,12 +289,10 @@ iterator allInSensors*(world: World, entity: string): lent SpaceEntity =
     filtered = world.activeChunk.nameToEntityInd[InsensitiveString entity]
     ent = world.activeChunk.entities[filtered]
     sensorRange = ent.sensorRange()
-    x = clamp(ent.x.int - sensorRange, 0, 1000)
-    y = clamp(ent.y.int - sensorRange, 0, 1000)
     sqrRange = sensorRange * sensorRange
 
-  for i, otherEnt in world.activeChunk.entities.inRangePairs(x, y, sensorRange, sensorRange):
+  for i, otherEnt in world.activeChunk.entities.inRangePairs(ent.x.int, ent.y.int, sensorRange, sensorRange):
     if i != filtered:
-      let sqrDist = int (ent.x - otherEnt.x) * (ent.x - otherEnt.x) + (ent.y - otherEnt.y) * (ent.y - otherEnt.y)
-      if sqrDist <= sqrRange:
+      let sqrDist = (ent.x - otherEnt.x) * (ent.x - otherEnt.x) + (ent.y - otherEnt.y) * (ent.y - otherEnt.y)
+      if sqrDist <= sqrRange.float32:
         yield otherEnt

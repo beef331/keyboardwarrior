@@ -18,7 +18,7 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
   if active:
     gameState.buffer.clearShapes()
     gamestate.buffer.mode = Graphics
-    let player = gameState.world.player
+    let player = gameState.activeShipEntity
 
     gameState.buffer.drawBox(
       gameState.buffer.pixelWidth.float32 / 2,
@@ -37,6 +37,7 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
     let sensorRange = gameState.activeShipEntity.sensorRange()
 
     for entry in gameState.world.allInSensors(gameState.activeShip):
+
       let
         xDist = entry.x - player.x
         yDist = entry.y - player.y
@@ -53,7 +54,7 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
             else:
               gameState.buffer.properties
 
-        gameState.buffer.drawBox(x, y, 10, props = color)
+        gameState.buffer.drawBox(x, y, 10 * (1 - (realDist / sensorRange.float32)), props = color)
         gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + 10f, 0, scale = 0.3f, props = color)
 
 proc sensorHandler(gameState: var GameState, input: string) =
