@@ -35,8 +35,8 @@ type
       ## [^1] is active
       ## [0] is the player's
 
-    programs: Table[string, Traitor[Program]]
-    activeProgram: string
+    programs: Table[InsensitiveString, Traitor[Program]]
+    activeProgram: InsensitiveString
     handlers: Table[InsensitiveString, Command]
     input: string
     programX: int
@@ -68,7 +68,7 @@ proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
   (gameState.programX, gameState.programY) = gamestate.buffer.getPosition()
   gameState.buffer.clearTo(gameState.programY)
 
-  let programName = gameState.activeShip & program.name()
+  let programName = InsensitiveString gameState.activeShip & program.name()
   gameState.activeProgram = programName
 
   if programName notin gameState.programs:
@@ -76,14 +76,14 @@ proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
 
 proc enterProgram*(gameState: var GameState, program: sink string) =
   let programName = gameState.activeShip & program
-  gameState.activeProgram = program
+  gameState.activeProgram = InsensitiveString program
 
 proc exitProgram*(gameState: var GameState) =
   gameState.programs[gameState.activeProgram].onExit(gameState)
-  gameState.activeProgram = ""
+  gameState.activeProgram = insStr""
   gameState.buffer.put ">"
 
-proc hasProgram*(gameState: var GameState, name: string): bool = name in gameState.programs
+proc hasProgram*(gameState: var GameState, name: string): bool = name.InsensitiveString in gameState.programs
 
 proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.handlers
 proc getCommand*(gameState: var GameState, name: string): lent Command = gameState.handlers[InsensitiveString(name)]
