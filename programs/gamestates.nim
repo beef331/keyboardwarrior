@@ -99,7 +99,7 @@ proc getEntity*(gameState: var GameState, name: string): var SpaceEntity =
 
 proc takeControlOf*(gameState: var GameState, name: string): bool =
   ## takes control of a ship returning true if it can be found and connected to
-  result = gameState.world.entityExists(name) and name notin gameState.shipStack # O(N) Send help!
+  result = gameState.world.entityExists(name) and name != gameState.shipStack[^1] # O(N) Send help!
   if result:
     gameState.shipStack.add name
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
@@ -144,10 +144,10 @@ proc init*(_: typedesc[GameState]): GameState =
         gameState.shipStack.setLen(gameState.shipStack.high)
       else:
         gameState.buffer.put("Where do you want to go,")
-        gameState.buffer.put("SPACE?\n", GlyphProperties(
+        gameState.buffer.put(" SPACE?\n", GlyphProperties(
           foreground: gameState.buffer.properties.foreground,
           background: gameState.buffer.properties.background,
-          shakeStrength: 0.1, shakeSpeed: 30)
+          shakeStrength: 5, shakeSpeed: 30)
         )
   )
 
