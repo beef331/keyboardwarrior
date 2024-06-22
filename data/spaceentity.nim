@@ -58,7 +58,7 @@ type
     Jammed
 
   System* = object
-    name*: string
+    name*: InsensitiveString
     powerUsage*: int # Generated when a generator
     flags*: set[SystemFlag] = {Powered}
     case kind*: SystemKind
@@ -153,9 +153,10 @@ proc init*(world: var World, playerName, seed: string) =
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
           systems: @[
-            System(name: "Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
-            System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
-            System(name: "Warp Core", kind: Generator, powerUsage: 300),
+            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
+            System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
+            System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
+            System(name: insStr"WBay1", kind: WeaponBay)
           ]
         )
     )
@@ -198,9 +199,9 @@ proc init*(world: var World, playerName, seed: string) =
           foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
         ),
         systems: @[
-          System(name: "Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
-          System(name: "Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
-          System(name: "Warp Core", kind: Generator, powerUsage: 300),
+          System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
+          System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
+          System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
         ]
       )
 
