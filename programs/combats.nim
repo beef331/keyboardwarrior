@@ -24,3 +24,27 @@ command(
   "Sets the target of a specific weapon.",
   targetHandler
 )
+
+proc fireHandler(gameState: var GameState, input: string) =
+  if (let (success, bay) = input.scanTuple("$s$+$."); success):
+    var found = false
+    for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
+      if sys.name == InsensitiveString(bay):
+        if sys.kind == ToolBay:
+          gameState.writeError("Cannot fire a toolbay.")
+        else:
+          found = true
+          todo("Fire weapon bay.")
+
+    if not found:
+      gameState.writeError("No bay named: '" & bay & "'.\n")
+
+
+  else:
+    gameState.writeError("Expected: 'fire BayName'\n")
+
+command(
+  "fire",
+  "Fire bay at current target.",
+  fireHandler
+)
