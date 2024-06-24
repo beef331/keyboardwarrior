@@ -9,7 +9,12 @@ proc targetHandler(gameState: var GameState, input: string) =
     for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
       if sys.name == InsensitiveString(bay):
         found = true
-        todo("Set bay target.")
+        if not gameState.world.entityExists(target):
+          gameState.writeError("No target named: '" & target & "'.\n")
+        else:
+          sys.weaponTarget = target
+        break
+
 
     if not found:
       gameState.writeError("No bay named: '" & bay & "'.\n")
@@ -30,11 +35,17 @@ proc fireHandler(gameState: var GameState, input: string) =
     var found = false
     for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
       if sys.name == InsensitiveString(bay):
+        found = true
         if sys.kind == ToolBay:
-          gameState.writeError("Cannot fire a toolbay.")
+          gameState.writeError("Cannot fire a toolbay.\n")
+        elif Powered notin sys.flags:
+          gameState.writeError("Cannot fire a unpowered weapon bay.\n")
+        elif not gameState.world.entityExists(sys.weaponTarget):
+          gameState.writeError("Invalid target.\n")
         else:
-          found = true
-          todo("Fire weapon bay.")
+          sys.flags.incl Toggled
+        break
+
 
     if not found:
       gameState.writeError("No bay named: '" & bay & "'.\n")

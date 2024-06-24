@@ -56,11 +56,14 @@ type
   SystemFlag* = enum
     Powered
     Jammed
+    Toggled
 
   System* = object
     name*: InsensitiveString
     powerUsage*: int # Generated when a generator
     flags*: set[SystemFlag] = {Powered}
+    interactionTime*: float32
+    interactionDelay*: float32
     case kind*: SystemKind
     of Sensor:
       sensorRange*: int
@@ -156,7 +159,7 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
             System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
-            System(name: insStr"WBay1", kind: WeaponBay)
+            System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100)
           ]
         )
     )
@@ -211,17 +214,6 @@ proc init*(world: var World, playerName, seed: string) =
 
     inc world.activeChunk.nameCount, insStr selectedName
 
-proc update*(world: var World, dt: float32) =
-  for entity in world.activeChunk.entities.mitems:
-    let
-      xOffset = cos(entity.heading)
-      yOffset = sin(entity.heading)
-    entity.x += dt * entity.velocity * xOffset
-    entity.y += dt * entity.velocity * yOffset
-
-  for toMove in world.activeChunk.entities.reposition():
-    discard toMove # TODO: Move this to the next chunk
-
 
 proc player*(world: World): lent SpaceEntity =
   world.activeChunk.entities[world.player]
@@ -233,6 +225,8 @@ proc getEntity*(world: var World, name: string): var SpaceEntity =
   world.activeChunk.entities[world.activeChunk.nameToEntityInd[insStr name]]
 
 proc entityExists*(world: World, name: string): bool = insStr(name) in world.activeChunk.nameToEntityInd
+proc entityExists*(world: World, name: InsensitiveString): bool = name in world.activeChunk.nameToEntityInd
+
 
 iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
   for system in entity.shipData.systems:
@@ -243,8 +237,27 @@ iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): l
       if system.kind in filter:
         yield system
 
+iterator systemsOf*(entity: var SpaceEntity, filter: set[SystemKind] | NotSystem): var System =
+  for system in entity.shipData.systems.mitems:
+    when filter is NotSystem:
+      if system.kind notin filter.set[:SystemKind]:
+        yield system
+    else:
+      if system.kind in filter:
+        yield system
+
 iterator poweredSystemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
   for system in entity.shipData.systems:
+    if Powered in system.flags:
+      when filter is NotSystem:
+        if system.kind notin filter.set[:SystemKind]:
+          yield system
+      else:
+        if system.kind in filter:
+          yield system
+
+iterator poweredSystemsOf*(entity: var SpaceEntity, filter: set[SystemKind] | NotSystem): var System =
+  for system in entity.shipData.systems.mitems:
     if Powered in system.flags:
       when filter is NotSystem:
         if system.kind notin filter.set[:SystemKind]:
@@ -297,3 +310,60 @@ iterator allInSensors*(world: World, entity: string): lent SpaceEntity =
       let sqrDist = (ent.x - otherEnt.x) * (ent.x - otherEnt.x) + (ent.y - otherEnt.y) * (ent.y - otherEnt.y)
       if sqrDist <= sqrRange.float32:
         yield otherEnt
+
+
+proc fireWeapon(world: var World, ent: SpaceEntity, sys: var System, dt: float32) =
+  assert Powered in sys.flags
+  assert Toggled in sys.flags
+  assert sys.kind == WeaponBay
+
+  if sys.currentAmmo == 0:
+    sys.flags.excl Toggled
+    return
+
+  sys.interactionTime -= dt
+  if sys.interactionTime <= 0:
+    var counter {.global.}: int = 0
+    let name = "bullet" & $counter
+    inc counter
+    let
+      target = world.getEntity sys.weaponTarget
+      heading = arctan2(target.y - ent.y, target.x - ent.x)
+
+
+    world.activeChunk.nameToEntityInd[insStr name] = world.activeChunk.entities.add SpaceEntity(
+        kind: Projectile,
+        name: name,
+        x: ent.x,
+        y: ent.y,
+        velocity: 10,
+        maxSpeed: 10,
+        heading: heading,
+      )
+
+    dec sys.currentAmmo
+
+    if sys.currentAmmo == 0:
+      sys.flags.excl Toggled
+
+    sys.interactionTime = sys.interactionDelay
+
+
+
+
+proc update*(world: var World, dt: float32) =
+  for entity in world.activeChunk.entities.mitems:
+    let
+      xOffset = cos(entity.heading)
+      yOffset = sin(entity.heading)
+    entity.x += dt * entity.velocity * xOffset
+    entity.y += dt * entity.velocity * yOffset
+    if entity.kind == Ship:
+      for system in entity.poweredSystemsOf({WeaponBay}):
+        if Toggled in system.flags:
+          fireWeapon(world, entity, system, dt)
+
+
+
+  for toMove in world.activeChunk.entities.reposition():
+    discard toMove # TODO: Move this to the next chunk
