@@ -10,6 +10,20 @@ type StatusEntry = object
   powerConsumption {.tableStringify(powerFormat).}: int
   status: string
 
+proc status(sys: System): string =
+  case sys.kind
+  of WeaponBay:
+    if Jammed in sys.flags:
+      "Jammed"
+    elif Toggled in sys.flags:
+      "Firing"
+    elif sys.weaponTarget == "":
+      "No Target"
+    else:
+      "Target: " & sys.weaponTarget
+  else:
+    ""
+
 proc statusHandler(gameState: var GameState, input: string) =
   var
     entries: seq[StatusEntry]
@@ -23,11 +37,7 @@ proc statusHandler(gameState: var GameState, input: string) =
           system.powerUsage
         else:
           -system.powerUsage),
-      status:(
-        if Jammed in system.flags:
-          "Jammed"
-        else:
-          ""),
+      status: system.status,
       )
 
     let

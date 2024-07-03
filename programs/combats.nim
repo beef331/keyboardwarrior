@@ -1,5 +1,5 @@
 import gamestates
-import std/strscans
+import std/[strscans, setutils]
 import "$projectdir"/data/[spaceentity, insensitivestrings]
 import "$projectdir"/utils/todoer
 
@@ -43,7 +43,7 @@ proc fireHandler(gameState: var GameState, input: string) =
         elif not gameState.world.entityExists(sys.weaponTarget):
           gameState.writeError("Invalid target.\n")
         else:
-          sys.flags.incl Toggled
+          sys.flags[Toggled] = Toggled notin sys.flags
         break
 
 
@@ -56,6 +56,6 @@ proc fireHandler(gameState: var GameState, input: string) =
 
 command(
   "fire",
-  "Fire bay at current target.",
+  "Toggles the fire state of a weapon bay. If active shuts it off.",
   fireHandler
 )
