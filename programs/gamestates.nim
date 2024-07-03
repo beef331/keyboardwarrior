@@ -38,6 +38,10 @@ type
     programs: Table[InsensitiveString, Traitor[Program]]
     activeProgram: InsensitiveString
     handlers: Table[InsensitiveString, Command]
+
+    history: seq[string]
+    historyPos: int
+
     input: string
     programX: int
     programY: int
@@ -168,6 +172,9 @@ proc init*(_: typedesc[GameState]): GameState =
 
 proc dispatchCommand(gameState: var GameState) =
   let input {.cursor.} = gameState.input
+  if not input.isEmptyOrWhitespace():
+    gameState.history.add input
+  gameState.historyPos = 0
   if input.len > 0:
     let
       ind =
@@ -209,7 +216,7 @@ proc update*(gameState: var GameState, dt: float) =
       gameState.input.add inputText()
       gameState.buffer.clearLine()
       gameState.buffer.put(gameState.input)
-    if KeyCodeReturn.isDownRepeating():
+    if KeyCodeReturn.isDownRepeating() and gameState.input.len > 0:
       gameState.shipStack.add gameState.input
       gameState.world.init(gameState.input, gameState.input) # TODO: Take a seed aswell
       gameState.input.setLen(0)
@@ -231,25 +238,41 @@ proc update*(gameState: var GameState, dt: float) =
       if isTextInputActive() and gameState.currentProgramFlags() == {}:
         if inputText().len > 0:
           gameState.input.add inputText()
-          gameState.buffer.clearLine()
-          gameState.buffer.put(">" & gameState.input)
 
         if KeyCodeReturn.isDownRepeating():
           gameState.buffer.newLine()
           gameState.dispatchCommand()
-          if not gameState.inProgram: # We didnt enter a program
-            gameState.buffer.put(">")
 
         if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
           gameState.input.setLen(gameState.input.high)
-          gameState.buffer.clearLine()
-          gameState.buffer.put(">" & gameState.input)
 
-      if KeyCodeUp.isDownRepeating():
+      if KeyCodePageUp.isDownRepeating():
         gameState.buffer.scrollUp()
 
-      if KeyCodeDown.isDownRepeating():
+      if KeyCodePageDown.isDownRepeating():
         gameState.buffer.scrollDown()
+
+      if KeyCodeUp.isDownRepeating():
+        inc gameState.historyPos
+        if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
+          gameState.input = gameState.history[^gameState.historyPos]
+        else:
+          gamestate.input = ""
+
+      if KeyCodeDown.isDownRepeating():
+        dec gamestate.historyPos
+        if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
+          gameState.input = gameState.history[^gameState.historyPos]
+        else:
+          gameState.input = ""
+
+      gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
+
+      if not gameState.inProgram:
+        gameState.buffer.clearLine()
+        gameState.buffer.put(">")
+        gameState.buffer.put(gameState.input)
+
     else:
       if gameState.buffer.mode == Text:
         gameState.buffer.clearTo(gameState.programY)
