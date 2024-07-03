@@ -2,6 +2,7 @@ import std/[times, os]
 import screenutils/screenrenderer
 import programs/[gamestates]
 import pkg/[vmath, pixie, truss3D]
+import pkg/truss3D/inputs
 
 var
   gameState: GameState
@@ -27,14 +28,82 @@ proc init =
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
 
-proc update(dt: float32) =
-  gamestate.update(dt)
-  time += dt
+when not defined(testing):
+  proc update(dt: float32) =
+    gamestate.update(dt)
+    time += dt
 
-  let currModTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
-  if shaderModificationTime < currModTime:
-    screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
-    shaderModificationTime = currModTime
+    let currModTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
+    if shaderModificationTime < currModTime:
+      screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
+      shaderModificationTime = currModTime
+else:
+  import screenutils/pam
+  import pkg/pixie/fileformats/png
+
+
+  var errorCode: int
+  template genTest(name: string, dt: float32, body: untyped) =
+    body
+    gameState.buffer.upload(dt)
+    gameState.buffer.render()
+
+    var img = newImage(gameState.buffer.pixelWidth, gameState.buffer.pixelHeight)
+
+    glGetTextureImage(gameState.buffer.getFrameBufferTexture().Gluint, 0, GlRgba,  GlUnsignedByte, img.data.len * 4, img.data[0].addr)
+    img.flipVertical()
+    let
+      path = "tests" / "testimages" / name.changeFileExt("png")
+      testPath = path.changeFileExt("test.png")
+      debugPath = path.changeFileExt("debug.png")
+    if not fileExists(path):
+      img.writeFile(path)
+    else:
+      if not compare(ImageComparison(data: path, isPath: true), ImageComparison(data: img.encodePng()), 0.0001, debugPath):
+        img.writeFile(testPath)
+        echo "Error: Failed to match ", name
+        errorCode = 1
+
+  proc update(dt: float32) =
+    genTest("console/welcomescreen", 0):
+      gameState.update(0)
+
+    genTest("console/username", 0):
+      inputs.inputs.inputText() = "t"
+      gameState.update(0.1)
+      inputs.inputs.inputText() = ""
+      gameState.update(0.1)
+
+    genTest("console/loggedin", 0):
+      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(0)
+      inputs.inputs.simulateClear(KeyCodeReturn)
+
+    genTest("console/sensors", 0):
+      inputs.inputs.inputText() = "sensors"
+      gameState.update(0.1)
+      inputs.inputs.inputText() = ""
+      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeReturn)
+
+    genTest("console/exitprogram", 0):
+      inputs.inputs.simulateDown(KeyCodeEscape)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeEscape)
+
+    genTest("console/scrollUp", 0):
+      inputs.inputs.simulateDownRepeating(KeycodePageUp)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeycodePageUp)
+
+    genTest("console/scrollDown", 0):
+      inputs.inputs.simulateDownRepeating(KeycodePageDown)
+      gameState.update(0.1)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeycodePageDown)
+
+    quit errorCode
 
 proc draw() =
 
