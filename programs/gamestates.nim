@@ -80,7 +80,7 @@ proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
 
 proc enterProgram*(gameState: var GameState, program: sink string) =
   let programName = gameState.activeShip & program
-  gameState.activeProgram = InsensitiveString program
+  gameState.activeProgram = InsensitiveString programName
 
 proc exitProgram*(gameState: var GameState) =
   gameState.programs[gameState.activeProgram].onExit(gameState)
@@ -235,16 +235,20 @@ proc update*(gameState: var GameState, dt: float) =
         program.update(gamestate, dt, false)
 
     if not gamestate.inProgram or Blocking in gamestate.currentProgramFlags:
+      var dirtiedInput = false
       if isTextInputActive() and gameState.currentProgramFlags() == {}:
         if inputText().len > 0:
           gameState.input.add inputText()
+          dirtiedInput = true
 
         if KeyCodeReturn.isDownRepeating():
           gameState.buffer.newLine()
           gameState.dispatchCommand()
+          dirtiedInput = true
 
         if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
           gameState.input.setLen(gameState.input.high)
+          dirtiedInput = true
 
       if KeyCodePageUp.isDownRepeating():
         gameState.buffer.scrollUp()
@@ -258,6 +262,7 @@ proc update*(gameState: var GameState, dt: float) =
           gameState.input = gameState.history[^gameState.historyPos]
         else:
           gamestate.input = ""
+        dirtiedInput = true
 
       if KeyCodeDown.isDownRepeating():
         dec gamestate.historyPos
@@ -265,24 +270,26 @@ proc update*(gameState: var GameState, dt: float) =
           gameState.input = gameState.history[^gameState.historyPos]
         else:
           gameState.input = ""
+        dirtiedInput = true
 
       gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
 
-      if not gameState.inProgram:
+      if dirtiedInput and not gameState.inProgram:
         gameState.buffer.clearLine()
         gameState.buffer.put(">")
         gameState.buffer.put(gameState.input)
+
 
     else:
       if gameState.buffer.mode == Text:
         gameState.buffer.clearTo(gameState.programY)
         gameState.buffer.cameraPos = gameState.programY
+
       gameState.programs[gameState.activeProgram].update(gamestate, dt, true)
 
     if gameState.inProgram:
       if KeyCodeEscape.isDown:
         gameState.exitProgram()
-
 
 
   let chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
