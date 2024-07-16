@@ -2,7 +2,7 @@ import std/[times, os]
 import screenutils/screenrenderer
 import programs/[gamestates]
 import pkg/[vmath, pixie, truss3D]
-import pkg/truss3D/inputs
+import pkg/truss3D/[inputs, logging]
 
 var
   gameState: GameState
@@ -131,5 +131,5 @@ proc draw() =
       screenShader.setUniform("screenSize", scrSize, required = false)
       render(rectModel)
 
-
+addLoggers("keyboardwarrior")
 initTruss("Something", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)
