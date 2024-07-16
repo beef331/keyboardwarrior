@@ -132,6 +132,9 @@ type
     frameBufferSetup: bool
     frameBuffer: FrameBuffer
 
+    graphicCursorX: int = -1
+    graphicCursorY: int = -1
+
 
 proc pixelHeight*(buff: Buffer): int = buff.pixelHeight
 proc pixelWidth*(buff: Buffer): int = buff.pixelWidth
@@ -205,6 +208,15 @@ proc getColorIndex(buff: var Buffer, color: chroma.Color): int32 =
     buff.dirtiedColors = true
     return int32 colInd
 
+proc getPropertyIndex(buff: var Buffer, prop: GlyphProperties): uint16 =
+  buff.propToInd.withValue prop, val:
+    return val[]
+  do:
+    let ind = uint16 buff.cachedProperties.len
+    buff.cachedProperties.add prop
+    buff.propToInd[prop] = ind
+    return ind
+
 proc getFrameBufferTexture*(buff: Buffer): lent Texture = buff.frameBuffer.colourTexture
 
 proc toggleFrameBuffer*(buff: var Buffer) =
@@ -276,13 +288,15 @@ proc clearShapes*(buff: var Buffer) = buff.shapes.setLen(0)
 
 proc uploadTextMode(buff: var Buffer) =
   assert buff.mode == Text
-  let scrSize =
-    if buff.useFrameBuffer:
-      vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
-    else:
-      vec2 screenSize()
-
-  var (x, y) = (-1f, 1f - buff.atlas.runeEntry(Rune('+')).rect.h / scrSize.y)
+  let
+    scrSize =
+      if buff.useFrameBuffer:
+        vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
+      else:
+        vec2 screenSize()
+    nonPrintableSize = buff.atlas.runeEntry(Rune('+')).rect
+  let (startX, startY) = (-1f, 1f - nonPrintableSize.h / scrSize.y)
+  var (x, y) = (startX, startY)
   buff.fontTarget.model.clear()
   var rendered = false
   for ind in buff.cameraPos .. buff.cursorY:
@@ -295,12 +309,26 @@ proc uploadTextMode(buff: var Buffer) =
       if rune == Rune('\n'):
         break
       elif rune.isWhiteSpace:
-        x += buff.atlas.runeEntry(Rune('+')).rect.w / scrSize.x
+        x += nonPrintableSize.w / scrSize.x
       else:
         x += size.x
 
-    y -= buff.atlas.runeEntry(Rune('+')).rect.h / scrSize.y
+    y -= nonPrintableSize.h / scrSize.y
     x = -1f
+
+
+  if buff.graphicCursorX != -1 and buff.graphicCursorY != -1:
+    let
+      cursX = startX + buff.graphicCursorX.float32 * nonPrintableSize.w / scrSize.x
+      cursY = startY - (buff.graphicCursorY - buff.cameraPos).float32 * nonPrintableSize.h / scrSize.y
+    var prop = buff.properties
+    prop.blinkSpeed = 3
+    prop.background.a = 0
+    let propInd = buff.getPropertyIndex(prop)
+
+
+    discard buff.uploadRune(scrSize, cursX, cursY, Glyph(rune: Rune'_', properties: propInd), 0)
+
 
   if rendered:
     if buff.dirtiedColors:
@@ -496,10 +524,7 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
   if buff.lines.len == 0:
     buff.lines.add Line()
 
-  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
-  if propInd == uint16 buff.cachedProperties.len:
-    buff.propToInd[props] = propInd
-    buff.cachedProperties.add props
+  let propInd = buff.getPropertyIndex(props)
 
   for rune in s.chr:
     when getBuffer:
@@ -534,10 +559,7 @@ proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true) =
 
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: GlyphProperties) =
   assert buff.mode == Graphics
-  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
-  if propInd == uint16 buff.cachedProperties.len:
-    buff.propToInd[props] = propInd
-    buff.cachedProperties.add props
+  let propInd = buff.getPropertyIndex(props)
 
   var (x, y) = (x, y)
   for rune in s.runes:
@@ -564,10 +586,7 @@ proc drawText*(buff: var Buffer, s: string, x, y: float32) =
   buff.drawText(s, x, y, 0, 1, buff.properties)
 
 proc drawRect*(buff: var Buffer, x, y, width, height: float32, props: GlyphProperties, outline = false) =
-  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
-  if propInd == uint16 buff.cachedProperties.len:
-    buff.propToInd[props] = propInd
-    buff.cachedProperties.add props
+  let propInd = buff.getPropertyIndex(props)
   buff.shapes.add:
     if outline:
       Shape(kind: OutlineRectangle, x: x, y: y, rectW: width, rectH: height, props: propInd)
@@ -584,10 +603,8 @@ proc drawBox*(buff: var Buffer, x, y, width: float32, outline = false) =
   buff.drawRect(x, y, width, width, buff.properties, outline)
 
 proc drawEllipse*(buff: var Buffer, x, y, majorRadius, minorRadius: float32, props: GlyphProperties, outline = false) =
-  let propInd = buff.propToInd.getOrDefault(props, uint16 buff.cachedProperties.len)
-  if propInd == uint16 buff.cachedProperties.len:
-    buff.propToInd[props] = propInd
-    buff.cachedProperties.add props
+  let propInd = buff.getPropertyIndex(props)
+
   buff.shapes.add:
     if outline:
       Shape(kind: OutlineEllipse, x: x, y: y, eRadius1: minorRadius, eRadius2: majorRadius, props: propInd)
@@ -602,8 +619,6 @@ proc drawCircle*(buff: var Buffer, x, y, radius: float32, props: GlyphProperties
 
 proc drawCircle*(buff: var Buffer, x, y, radius: float32, outline = false) =
   buff.drawEllipse(x, y, radius, radius, buff.properties, outline)
-
-
 
 proc fetchAndPut*(buff: var Buffer, s: string, moveCamera = true): seq[Glyph] =
   put buff, s, buff.properties, moveCamera, true
@@ -644,6 +659,14 @@ template withPos*(buff: var Buffer, x, y: int, body: untyped) =
   buff.setPosition(x, y)
   body
   buff.setPosition(pos[0], pos[1])
+
+proc showCursor*(buffer: var Buffer, offset: int) =
+  buffer.graphicCursorX = buffer.cursorX + offset
+  buffer.graphicCursorY = buffer.cursorY
+
+proc hideCursor*(buffer: var Buffer) =
+  buffer.graphicCursorX = -1
+  buffer.graphicCursorY = -1
 
 
 when isMainModule:

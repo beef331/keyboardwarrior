@@ -51,7 +51,7 @@ proc currentGuess(hwHack: var HardwareHack): var HackGuess = hwHack.guesses[hwHa
 proc isHacking(hwHack: HardwareHack): bool =
   hwHack.currentGuessInd != -1 and not hwHack.currentGuess.guessed
 
-proc put*(buffer: var Buffer, gameState: GameState, hwHack: HardwareHack) =
+proc put*(buffer: var Buffer, gameState: var GameState, hwHack: HardwareHack) =
   var entryProps {.global.}: seq[GlyphProperties]
   entryProps.setLen(0)
   for guess in hwHack.guesses:
@@ -72,7 +72,7 @@ proc put*(buffer: var Buffer, gameState: GameState, hwHack: HardwareHack) =
 
   if not hwHack.isHacking:
     buffer.put "Id to guess: "
-    buffer.put gameState.peekInput().str
+    gameState.showInput()
     if hwHack.errorMsg.len > 0:
       buffer.newLine()
       buffer.put hwHack.errorMsg, GlyphProperties(foreground: parseHtmlColor("red"))

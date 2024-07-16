@@ -91,6 +91,7 @@ proc exitProgram*(gameState: var GameState) =
   gameState.programs[gameState.activeProgram].onExit(gameState)
   gameState.activeProgram = insStr""
   gameState.buffer.put ">"
+  gamestate.buffer.showCursor(0)
   gameState.input.pos = 0
   gameState.input.str.setLen(0)
 
@@ -123,6 +124,11 @@ proc popInput*(gameState: var GameState): string =
   gameState.input.str.setLen(0)
 
 proc peekInput*(gameState: GameState): TextInput = gameState.input
+
+proc showInput*(gameState: var GameState, withCursor = true) =
+  if withCursor:
+    gameState.buffer.showCursor(gameState.input.pos)
+  gameState.buffer.put(gameState.input.str)
 
 import programutils
 export programutils
@@ -226,8 +232,7 @@ proc update*(gameState: var GameState, dt: float) =
     gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
       gameState.buffer.put gameState.lastFpsBuffer
 
-  var dirtiedInput = inputText().len > 0
-  if dirtiedInput:
+  if inputText().len > 0:
     gameState.input.str.insert gameState.input.pos, inputText()
     gameState.input.pos.inc inputText().len
     setInputText("")
@@ -235,14 +240,20 @@ proc update*(gameState: var GameState, dt: float) =
   if KeyCodeBackspace.isDownRepeating() and gameState.input.pos >= 0 and gameState.input.str.len > 0:
     gameState.input.str.delete(gameState.input.pos - 1, gameState.input.pos - 1)
     dec gameState.input.pos
-    dirtiedInput = true
+
+  if KeycodeLeft.isDownRepeating:
+    gameState.input.pos = max(gameState.input.pos - 1, 0)
+
+  if KeycodeRight.isDownRepeating:
+    gameState.input.pos = min(gameState.input.pos + 1, gameState.input.str.len)
+
 
   if not gamestate.world.isReady:
     gamestate.buffer.setPosition(0, 0)
     gamestate.buffer.put "Shall we play a game?\n"
     gamestate.buffer.put "Enter your Ship name:\n"
     gameState.buffer.clearLine()
-    gameState.buffer.put gameState.input.str
+    gameState.showInput()
 
     if KeyCodeReturn.isDownRepeating() and gameState.input.str.len > 0:
       let name = gameState.popInput()
@@ -250,6 +261,8 @@ proc update*(gameState: var GameState, dt: float) =
       gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
       gameState.buffer.put ">"
+      gameState.showInput()
+
 
   else:
     gamestate.world.update(dt)
@@ -260,8 +273,6 @@ proc update*(gameState: var GameState, dt: float) =
         program.update(gamestate, dt, false)
 
     if not gamestate.inProgram or Blocking in gamestate.currentProgramFlags:
-
-
       if KeyCodePageUp.isDownRepeating(): # Scrollup
         gameState.buffer.scrollUp()
 
@@ -271,7 +282,6 @@ proc update*(gameState: var GameState, dt: float) =
       if Blocking notin gameState.currentProgramFlags:
         if KeyCodeReturn.isDownRepeating(): # Enter
           gameState.dispatchCommand()
-          dirtiedInput = true
 
         if KeyCodeUp.isDownRepeating(): # Up History
           inc gameState.historyPos
@@ -281,7 +291,6 @@ proc update*(gameState: var GameState, dt: float) =
           else:
             gamestate.input.str = ""
             gameState.input.pos = gameState.input.str.len
-          dirtiedInput = true
 
         if KeyCodeDown.isDownRepeating(): # Down History
           dec gamestate.historyPos
@@ -291,17 +300,19 @@ proc update*(gameState: var GameState, dt: float) =
           else:
             gamestate.input.str = ""
             gameState.input.pos = gameState.input.str.len
-          dirtiedInput = true
 
         gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
 
-        if dirtiedInput and not gameState.inProgram:
+        if not gameState.inProgram:
           gameState.buffer.clearLine()
           gameState.buffer.put(">")
-          gameState.buffer.put(gameState.input.str)
+          gameState.showInput()
+
+
 
 
     else:
+      gameState.buffer.hideCursor()
       if gameState.buffer.mode == Text:
         gameState.buffer.clearTo(gameState.programY)
         gameState.buffer.cameraPos = gameState.programY
