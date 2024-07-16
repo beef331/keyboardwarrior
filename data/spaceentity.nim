@@ -173,7 +173,7 @@ proc init*(world: var World, playerName, seed: string) =
       name = selectedName & $world.activeChunk.nameCount.getOrDefault(insStr selectedName)
       x = world.randState.rand(100d..900d)
       y =  world.randState.rand(100d..900d)
-      vel =  world.randState.rand(0.1d..0.3d)
+      vel =  world.randState.rand(0.5d..1d)
       faction = world.randState.rand(Faction)
       heading = world.randState.rand(0d..Tau)
 
@@ -328,8 +328,31 @@ proc fireWeapon(world: var World, ent: SpaceEntity, sys: var System, dt: float32
     inc counter
     let
       target = world.getEntity sys.weaponTarget
-      heading = arctan2(target.y - ent.y, target.x - ent.x)
+      xDist = target.x - ent.x
+      yDist = target.y - ent.y
+      xTargVelocity = cos(target.heading) * target.velocity
+      yTargVelocity = sin(target.heading) * target.velocity
+      dist = sqrt(xDist * xDist + yDist * yDist)
+      a = (xTargVelocity * xTargVelocity + yTargVelocity * yTargVelocity) - (10 * 10 * 2f)
+      b = 2f * (xTargVelocity * xDist + yTargVelocity * yDist)
+      c = xDist * xDist + yDist * yDist
+      disc = (b * b) - 4 * a * c
 
+      t1 = (-b + sqrt(disc)) / (2 * a)
+      t2 = (-b - sqrt(disc)) / (2 * a)
+      t =
+        if t1 < 0:
+          t2
+        elif t2 < 0:
+          t1
+        else:
+          min(t1, t2)
+
+      targetX = target.x + cos(target.heading) * target.velocity * t
+      targetY = target.y + sin(target.heading) * target.velocity * t
+      heading = arctan2(targetY - ent.y, targetX - ent.x)
+    if dist < 0:
+      echo "miss"
 
     world.activeChunk.nameToEntityInd[insStr name] = world.activeChunk.entities.add SpaceEntity(
         kind: Projectile,

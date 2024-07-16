@@ -49,13 +49,17 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
           x = offsetPos.x
           y = offsetPos.y
           color =
-            if entry.faction == Alliance:
+            if entry.kind == Projectile:
+              GlyphProperties(foreground: parseHtmlColor"yellow")
+            elif entry.faction == Alliance:
               GlyphProperties(foreground: parseHtmlColor"red")
             else:
               gameState.buffer.properties
+          size = 3f + 9f * float32(entry.kind != Projectile)
 
-        gameState.buffer.drawBox(x, y, 10 * (1 - (realDist / sensorRange.float32)), props = color)
-        gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + 10f, 0, scale = 0.3f, props = color)
+        gameState.buffer.drawBox(x, y, size * (1 - (realDist / sensorRange.float32)), props = color)
+        if entry.kind != Projectile:
+          gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f, props = color)
 
 proc sensorHandler(gameState: var GameState, input: string) =
   if gameState.hasProgram "Map":
