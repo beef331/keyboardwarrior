@@ -28,6 +28,10 @@ type
     manual*: string # Manpage
     handler*: CommandHandler
 
+  TextInput* = object
+    str*: string
+    pos*: int
+
   GameState* = object
     buffer*: Buffer
 
@@ -42,7 +46,6 @@ type
     history: seq[string]
     historyPos: int
 
-    input: string
     programX: int
     programY: int
     world*: World
@@ -50,6 +53,8 @@ type
 
     fpsX, fpsY: int # Where we write to
     lastFpsBuffer: seq[Glyph]
+
+    input: TextInput
 
 implTrait Program
 
@@ -86,6 +91,8 @@ proc exitProgram*(gameState: var GameState) =
   gameState.programs[gameState.activeProgram].onExit(gameState)
   gameState.activeProgram = insStr""
   gameState.buffer.put ">"
+  gameState.input.pos = 0
+  gameState.input.str.setLen(0)
 
 proc hasProgram*(gameState: var GameState, name: string): bool = name.InsensitiveString in gameState.programs
 
@@ -110,10 +117,23 @@ proc takeControlOf*(gameState: var GameState, name: string): bool =
 
 proc randState*(gameState: var GameState): var Rand = gameState.world.randState
 
+proc popInput*(gameState: var GameState): string =
+  result = move(gameState.input.str)
+  gameState.input.pos = 0
+  gameState.input.str.setLen(0)
+
+proc peekInput*(gameState: GameState): TextInput = gameState.input
+
 import programutils
 export programutils
 
 importAllCommands()
+
+proc insert(s: var string, at: int, toInsert: string) =
+  let appendBuffer = s[at..^1]
+  s.setLen(s.len + toInsert.len)
+  s[at..at + toInsert.high] = toInsert
+  s[at + toInsert.len..^1] = appendBuffer
 
 proc add*(gameState: var GameState, command: Command) =
   gameState.handlers[InsensitiveString(command.name)] = command
@@ -166,12 +186,9 @@ proc init*(_: typedesc[GameState]): GameState =
 
   result.buffer = Buffer(lineWidth: 60, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   result.buffer.initResources("PublicPixel.ttf", true)
-  if not result.world.isReady:
-    result.buffer.put "Shall we play a game?\n"
-    result.buffer.put "Enter your Ship name:\n"
 
 proc dispatchCommand(gameState: var GameState) =
-  let input {.cursor.} = gameState.input
+  let input = gameState.popInput()
   if not input.isEmptyOrWhitespace():
     gameState.history.add input
   gameState.historyPos = 0
@@ -183,11 +200,11 @@ proc dispatchCommand(gameState: var GameState) =
         else:
           input.high
       command = insStr input[0..ind]
+    gameState.buffer.newLine()
     if command in gamestate.handlers:
       gamestate.handlers[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command\n")
-  gameState.input = ""
 
 proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""
 proc currentProgramFlags(gameState: GameState): ProgramFlags =
@@ -209,75 +226,79 @@ proc update*(gameState: var GameState, dt: float) =
     gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
       gameState.buffer.put gameState.lastFpsBuffer
 
+  var dirtiedInput = inputText().len > 0
+  if dirtiedInput:
+    gameState.input.str.insert gameState.input.pos, inputText()
+    gameState.input.pos.inc inputText().len
+    setInputText("")
 
+  if KeyCodeBackspace.isDownRepeating() and gameState.input.pos >= 0 and gameState.input.str.len > 0:
+    gameState.input.str.delete(gameState.input.pos - 1, gameState.input.pos - 1)
+    dec gameState.input.pos
+    dirtiedInput = true
 
   if not gamestate.world.isReady:
-    if inputText().len > 0:
-      gameState.input.add inputText()
-      gameState.buffer.clearLine()
-      gameState.buffer.put(gameState.input)
-    if KeyCodeReturn.isDownRepeating() and gameState.input.len > 0:
-      gameState.shipStack.add gameState.input
-      gameState.world.init(gameState.input, gameState.input) # TODO: Take a seed aswell
-      gameState.input.setLen(0)
+    gamestate.buffer.setPosition(0, 0)
+    gamestate.buffer.put "Shall we play a game?\n"
+    gamestate.buffer.put "Enter your Ship name:\n"
+    gameState.buffer.clearLine()
+    gameState.buffer.put gameState.input.str
+
+    if KeyCodeReturn.isDownRepeating() and gameState.input.str.len > 0:
+      let name = gameState.popInput()
+      gameState.shipStack.add name
+      gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
       gameState.buffer.put ">"
 
-    if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
-      gameState.input.setLen(gameState.input.high)
-      gameState.buffer.clearLine()
-      gameState.buffer.put(gameState.input)
   else:
     gamestate.world.update(dt)
+
 
     for key, program in gamestate.programs:
       if key != gameState.activeProgram:
         program.update(gamestate, dt, false)
 
     if not gamestate.inProgram or Blocking in gamestate.currentProgramFlags:
-      var dirtiedInput = false
-      if isTextInputActive() and gameState.currentProgramFlags() == {}:
-        if inputText().len > 0:
-          gameState.input.add inputText()
-          dirtiedInput = true
 
-        if KeyCodeReturn.isDownRepeating():
-          gameState.buffer.newLine()
+
+      if KeyCodePageUp.isDownRepeating(): # Scrollup
+        gameState.buffer.scrollUp()
+
+      if KeyCodePageDown.isDownRepeating(): # Scroll Down
+        gameState.buffer.scrollDown()
+
+      if Blocking notin gameState.currentProgramFlags:
+        if KeyCodeReturn.isDownRepeating(): # Enter
           gameState.dispatchCommand()
           dirtiedInput = true
 
-        if KeyCodeBackspace.isDownRepeating() and gameState.input.len > 0:
-          gameState.input.setLen(gameState.input.high)
+        if KeyCodeUp.isDownRepeating(): # Up History
+          inc gameState.historyPos
+          if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
+            gameState.input.str = gameState.history[^gameState.historyPos]
+            gameState.input.pos = gameState.input.str.len
+          else:
+            gamestate.input.str = ""
+            gameState.input.pos = gameState.input.str.len
           dirtiedInput = true
 
-      if KeyCodePageUp.isDownRepeating():
-        gameState.buffer.scrollUp()
+        if KeyCodeDown.isDownRepeating(): # Down History
+          dec gamestate.historyPos
+          if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
+            gameState.input.str = gameState.history[^gameState.historyPos]
+            gameState.input.pos = gameState.input.str.len
+          else:
+            gamestate.input.str = ""
+            gameState.input.pos = gameState.input.str.len
+          dirtiedInput = true
 
-      if KeyCodePageDown.isDownRepeating():
-        gameState.buffer.scrollDown()
+        gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
 
-      if KeyCodeUp.isDownRepeating():
-        inc gameState.historyPos
-        if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
-          gameState.input = gameState.history[^gameState.historyPos]
-        else:
-          gamestate.input = ""
-        dirtiedInput = true
-
-      if KeyCodeDown.isDownRepeating():
-        dec gamestate.historyPos
-        if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
-          gameState.input = gameState.history[^gameState.historyPos]
-        else:
-          gameState.input = ""
-        dirtiedInput = true
-
-      gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
-
-      if dirtiedInput and not gameState.inProgram:
-        gameState.buffer.clearLine()
-        gameState.buffer.put(">")
-        gameState.buffer.put(gameState.input)
+        if dirtiedInput and not gameState.inProgram:
+          gameState.buffer.clearLine()
+          gameState.buffer.put(">")
+          gameState.buffer.put(gameState.input.str)
 
 
     else:
@@ -303,10 +324,8 @@ proc update*(gameState: var GameState, dt: float) =
     gameState.buffer.drawText(chars, 0f, gameState.buffer.pixelHeight.float32 * 2)
 
   gameState.buffer.upload(dt)
-  setInputText("")
 
   if gameState.shipStack.len > 0 and startCount == gameState.shipStack.len:
     gameState.activeShipEntity.shipData.glyphProperties = gameState.buffer.properties
 
   gameState.buffer.properties = props
-

@@ -20,7 +20,6 @@ type
     hackTime: float32
     timeToHack: float32
     currentChar: int
-    input: string
     errorMsg: string
     hackSpeed: float32 = 1
 
@@ -52,7 +51,7 @@ proc currentGuess(hwHack: var HardwareHack): var HackGuess = hwHack.guesses[hwHa
 proc isHacking(hwHack: HardwareHack): bool =
   hwHack.currentGuessInd != -1 and not hwHack.currentGuess.guessed
 
-proc put*(buffer: var Buffer, hwHack: HardwareHack) =
+proc put*(buffer: var Buffer, gameState: GameState, hwHack: HardwareHack) =
   var entryProps {.global.}: seq[GlyphProperties]
   entryProps.setLen(0)
   for guess in hwHack.guesses:
@@ -73,7 +72,7 @@ proc put*(buffer: var Buffer, hwHack: HardwareHack) =
 
   if not hwHack.isHacking:
     buffer.put "Id to guess: "
-    buffer.put hwHack.input
+    buffer.put gameState.peekInput().str
     if hwHack.errorMsg.len > 0:
       buffer.newLine()
       buffer.put hwHack.errorMsg, GlyphProperties(foreground: parseHtmlColor("red"))
@@ -82,11 +81,10 @@ proc put*(buffer: var Buffer, hwHack: HardwareHack) =
 
 proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, active: bool) =
   if active and not hwHack.isHacking:
-    if inputText().len > 0:
-      hwHack.input.add inputText()
+
     if KeyCodeReturn.isDownRepeating:
       try:
-        let guess = parseInt(hwHack.input)
+        let guess = parseInt(gameState.popInput())
         if guess in 0..hwHack.guesses.high:
           hwHack.currentGuessInd = guess
 
@@ -96,7 +94,6 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
         # TODO: Replace with i8n: "Expected integer"
         hwHack.errorMsg = e.msg
       hwHack.hackTime = 0
-      hwHack.input = ""
       hwHack.currentChar = 0
       if hwHack.isHacking:
         var totalHackTime = 0f
@@ -108,9 +105,6 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
           else:
             totalHackTime += 3f
         hwHack.timeToHack = totalHackTime
-
-  if KeyCodeBackspace.isDownRepeating and hwHack.input.len > 0:
-    hwHack.input.setLen(hwHack.input.high)
 
   if hwHack.isHacking:
     hwHack.hackTime = clamp(hwHack.hackTime + dt * hwHack.hackSpeed, 0, hwHack.timeToHack)
@@ -126,8 +120,7 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
         gameState.exitProgram()
         return
 
-
-    gameState.buffer.put(hwHack)
+    gameState.buffer.put(gameState, hwHack)
 
 proc onExit*(hw: var HardwareHack, gameState: GameState) = discard
 proc name*(hw: HardwareHack): string = hw.name & hw.target
