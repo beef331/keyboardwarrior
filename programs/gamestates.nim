@@ -136,10 +136,10 @@ export programutils
 importAllCommands()
 
 proc insert(s: var string, at: int, toInsert: string) =
-  let appendBuffer = s[at..^1]
+  let origEnd = s.high
   s.setLen(s.len + toInsert.len)
+  cast[ptr seq[char]](s.addr)[at + toInsert.len..^1] = s.toOpenArray(at, origEnd)
   s[at..at + toInsert.high] = toInsert
-  s[at + toInsert.len..^1] = appendBuffer
 
 proc add*(gameState: var GameState, command: Command) =
   gameState.handlers[InsensitiveString(command.name)] = command
@@ -237,7 +237,7 @@ proc update*(gameState: var GameState, dt: float) =
     gameState.input.pos.inc inputText().len
     setInputText("")
 
-  if KeyCodeBackspace.isDownRepeating() and gameState.input.pos >= 0 and gameState.input.str.len > 0:
+  if KeyCodeBackspace.isDownRepeating() and gameState.input.pos > 0 and gameState.input.str.len > 0:
     gameState.input.str.delete(gameState.input.pos - 1, gameState.input.pos - 1)
     dec gameState.input.pos
 
