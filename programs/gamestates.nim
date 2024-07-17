@@ -27,10 +27,18 @@ type
     help*: string
     manual*: string # Manpage
     handler*: CommandHandler
+    suggest*: proc(gs: GameState, input: string, ind: var int): string ## Suggests a field that can be entered to fill out
+
+  InputShow = enum
+    WithCursor
+    WithSuggestion
 
   TextInput* = object
     str*: string
     pos*: int
+    suggestionInd*: int = -1
+    suggestion*: string
+
 
   GameState* = object
     buffer*: Buffer
@@ -122,13 +130,21 @@ proc popInput*(gameState: var GameState): string =
   result = move(gameState.input.str)
   gameState.input.pos = 0
   gameState.input.str.setLen(0)
+  gameState.input.suggestion = ""
+  gameState.input.suggestionInd = -1
 
 proc peekInput*(gameState: GameState): TextInput = gameState.input
 
-proc showInput*(gameState: var GameState, withCursor = true) =
-  if withCursor:
+proc showInput*(gameState: var GameState, renderFlags = {WithCursor}) =
+  if WithCursor in renderFlags:
     gameState.buffer.showCursor(gameState.input.pos)
   gameState.buffer.put(gameState.input.str)
+  if WithSuggestion in renderFlags:
+    var prop = gameState.buffer.properties
+    prop.foreground.r *= 0.75
+    prop.foreground.g *= 0.75
+    prop.foreground.b *= 0.75
+    gameState.buffer.put(gameState.input.suggestion, props = prop)
 
 import programutils
 export programutils
@@ -193,6 +209,16 @@ proc init*(_: typedesc[GameState]): GameState =
   result.buffer = Buffer(lineWidth: 60, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   result.buffer.initResources("PublicPixel.ttf", true)
 
+proc clearSuggestion(gameState: var GameState) =
+  gamestate.input.suggestion = ""
+  gamestate.input.suggestionInd = -1
+
+proc takeSuggestion(gameState: var GameState) =
+  gameState.input.str.add gameState.input.suggestion
+  gameState.input.str.add " "
+  gameState.input.pos = gameState.input.str.len
+  gameState.clearSuggestion()
+
 proc dispatchCommand(gameState: var GameState) =
   let input = gameState.popInput()
   if not input.isEmptyOrWhitespace():
@@ -208,9 +234,44 @@ proc dispatchCommand(gameState: var GameState) =
       command = insStr input[0..ind]
     gameState.buffer.newLine()
     if command in gamestate.handlers:
+      gameState.clearSuggestion()
       gamestate.handlers[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command\n")
+
+
+proc suggest(gameState: var GameState) =
+  let input = gameState.input.str
+  if input.len > 0:
+    if input.find(WhiteSpace) != -1: # In the case we have a command we dispatch a command
+      let
+        ind =
+          if (let ind = input.find(' '); ind) != -1:
+            ind - 1
+          else:
+            input.high
+        command = insStr input[0..ind]
+      if command in gamestate.handlers and gamestate.handlers[command].suggest != nil:
+        gameState.input.suggestion = gamestate.handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
+    else: # We search top level commands
+
+      var totalName: int
+      for handler in gameState.handlers.keys:
+        if handler.string.insensitiveStartsWith(input):
+          inc totalName
+
+      var found = 0
+      for handler in gameState.handlers.keys:
+        if handler.string.insensitiveStartsWith(input):
+          if found == (gameState.input.suggestionInd + 1) mod totalName:
+            inc gameState.input.suggestionInd
+            gameState.input.suggestion = handler.string[input.len..^1]
+            break
+          inc found
+
+      if gameState.input.suggestionInd >= 0:
+        gameState.input.suggestionInd = gameState.input.suggestionInd mod totalName
+
 
 proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""
 proc currentProgramFlags(gameState: GameState): ProgramFlags =
@@ -218,7 +279,6 @@ proc currentProgramFlags(gameState: GameState): ProgramFlags =
     gameState.programs[gameState.activeProgram].getFlags()
   else:
     {}
-
 
 proc update*(gameState: var GameState, dt: float) =
   let
@@ -232,20 +292,31 @@ proc update*(gameState: var GameState, dt: float) =
     gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
       gameState.buffer.put gameState.lastFpsBuffer
 
+
   if inputText().len > 0:
     gameState.input.str.insert gameState.input.pos, inputText()
     gameState.input.pos.inc inputText().len
     setInputText("")
+    gameState.clearSuggestion()
+
 
   if KeyCodeBackspace.isDownRepeating() and gameState.input.pos > 0 and gameState.input.str.len > 0:
-    gameState.input.str.delete(gameState.input.pos - 1, gameState.input.pos - 1)
+    gameState.input.str.delete(gameState.input.pos - 1 .. gameState.input.pos - 1)
     dec gameState.input.pos
+    gameState.clearSuggestion()
+
 
   if KeycodeLeft.isDownRepeating:
     gameState.input.pos = max(gameState.input.pos - 1, 0)
 
   if KeycodeRight.isDownRepeating:
-    gameState.input.pos = min(gameState.input.pos + 1, gameState.input.str.len)
+    if gameState.input.suggestionInd != -1:
+      gameState.takeSuggestion()
+    else:
+      gameState.input.pos = min(gameState.input.pos + 1, gameState.input.str.len)
+
+  if KeycodeTab.isDownRepeating():
+    gameState.suggest()
 
 
   if not gamestate.world.isReady:
@@ -281,7 +352,10 @@ proc update*(gameState: var GameState, dt: float) =
 
       if Blocking notin gameState.currentProgramFlags:
         if KeyCodeReturn.isDownRepeating(): # Enter
-          gameState.dispatchCommand()
+          if gameState.input.suggestion.len > 0:
+            gameState.takeSuggestion()
+          else:
+            gameState.dispatchCommand()
 
         if KeyCodeUp.isDownRepeating(): # Up History
           inc gameState.historyPos
@@ -306,10 +380,10 @@ proc update*(gameState: var GameState, dt: float) =
         if not gameState.inProgram:
           gameState.buffer.clearLine()
           gameState.buffer.put(">")
-          gameState.showInput()
-
-
-
+          if gameState.input.suggestion.len > 0:
+            gameState.showInput({WithCursor, WithSuggestion})
+          else:
+            gameState.showInput()
 
     else:
       gameState.buffer.hideCursor()

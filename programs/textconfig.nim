@@ -59,12 +59,33 @@ proc handleTextChange(gamestate: var GameState, input: string) =
   else:
     gamestate.writeError("Incorrect command expected `text propertyName value`\n")
 
-command(
-  "text",
-  "This command allows you to change the properties of the terminal text",
-  handleTextChange
-):
-  """
+proc doSuggest(s: string): bool =
+  s.len > 1 and s.find(WhiteSpace, 0) == s.rfind(WhiteSpace)
+
+proc textSuggest(gameState: GameState, input: string, ind: var int): string =
+  if input.doSuggest:
+    template spaceLess: untyped = input.toOpenArray(1, input.high)
+    var foundInds = 0
+    const names = static: validNames
+
+    var totalNameCount = 0
+    for name in names:
+      if name.insensitiveStartsWith spaceless:
+        inc totalNameCount
+
+    for name in names:
+      if name.insensitiveStartsWith spaceless:
+        if foundInds == (ind + 1) mod totalNameCount:
+          inc ind
+          result = name[spaceless.len..^1]
+          break
+        inc foundInds
+
+
+
+
+
+const manual = """
 <event>
 <body>
 <p foreground = "#aaaaaa">`text propertyName value`</p>
@@ -110,3 +131,13 @@ Sets the shake movement speed<br/>
 </body>
 </event>
 """
+
+
+command(
+  "text",
+  "This command allows you to change the properties of the terminal text",
+  handleTextChange,
+  manual,
+  textSuggest
+)
+
