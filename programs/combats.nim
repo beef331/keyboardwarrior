@@ -31,10 +31,9 @@ iterator bays(gameState: GameState, hasTarget = false): string =
 
 proc targetSuggest(gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
-  of 2:
-
+  of 0, 1:
     suggestNext(gameState.bays, input, ind)
-  of 3:
+  of 2:
     iterator entities(gameState: GameState): string =
       for ent in gameState.world.allInSensors(gameState.activeShip):
         yield ent.name
@@ -77,7 +76,7 @@ proc fireHandler(gameState: var GameState, input: string) =
 
 proc fireSuggest(gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
-  of 2:
+  of 0, 1:
     suggestNext(gameState.bays(true), input, ind)
   else:
     ""

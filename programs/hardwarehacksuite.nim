@@ -147,8 +147,22 @@ proc hhs(gamestate: var GameState, input: string) =
   else:
     gameState.writeError("Cannot find any entity named: '" & input & "'.\n")
 
+
+iterator hackableEntities(gameState: GameState): string =
+  for ent in gameState.world.allInSensors(gameState.activeShip):
+    if ent.canHack:
+      yield ent.name
+
+proc hackSuggest(gameState: GameState, input: string, ind: var int): string =
+  case input.suggestIndex()
+  of 0, 1:
+    suggestNext(gameState.hackableEntities, input, ind)
+  else:
+    ""
+
 command(
   "hhs",
   "This starts a hack on the target.",
-  hhs
+  hhs,
+  suggest = hackSuggest
 )

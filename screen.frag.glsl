@@ -6,7 +6,7 @@ in vec2 fUv;
 uniform sampler2D tex;
 uniform vec2 screenSize;
 uniform float time;
-
+uniform float curve;
 
 
 /*
@@ -27,7 +27,7 @@ uniform float time;
 
 vec2 barrelUv(vec2 uv){
   uv -= 0.5;
-  uv *= pow(length(uv) / 0.5, length(uv) * 0.5);
+  uv *= pow(length(uv) / 0.5, length(uv) * curve);
   uv += 0.5;
   return uv;
 }

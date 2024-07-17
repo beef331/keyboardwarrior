@@ -64,6 +64,8 @@ type
 
     input: TextInput
 
+    curveAmount*: float32 # The curve amount
+
 implTrait Program
 
 iterator commands*(gameState: GameState): Command =
@@ -203,6 +205,24 @@ proc init*(_: typedesc[GameState]): GameState =
     handler: proc(gameState: var GameState, _: string) = gamestate.buffer.toBottom()
   )
 
+  result.add Command(
+    name: "curve",
+    help: "Adjust the curve amount",
+    handler: proc(gameState: var GameState, amount: string) =
+      let amnt =
+        try:
+          parseFloat(amount.strip())
+        except CatchableError as e:
+          gameState.writeError(e.msg)
+          gameState.buffer.newLine()
+          return
+      if amnt notin 0f..1f:
+        gameState.writeError("Expected value in `0..1` range.\n")
+      else:
+        gameState.curveAmount = amnt
+
+  )
+
   for command in programutils.commands():
     result.add command
 
@@ -242,22 +262,22 @@ proc dispatchCommand(gameState: var GameState) =
 
 proc suggest(gameState: var GameState) =
   let input = gameState.input.str
-  if input.len > 0:
-    if input.find(WhiteSpace) != -1: # In the case we have a command we dispatch a command
-      let
-        ind =
-          if (let ind = input.find(' '); ind) != -1:
-            ind - 1
-          else:
-            input.high
-        command = insStr input[0..ind]
-      if command in gamestate.handlers and gamestate.handlers[command].suggest != nil:
-        gameState.input.suggestion = gamestate.handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
-    else: # We search top level commands
-      iterator handlerStrKeys(gameState: GameState): string =
-        for key in gameState.handlers.keys:
-          yield string key
-      gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
+
+  if input.find(WhiteSpace) != -1 and input.len > 0: # In the case we have a command we dispatch a command
+    let
+      ind =
+        if (let ind = input.find(' '); ind) != -1:
+          ind - 1
+        else:
+          input.high
+      command = insStr input[0..ind]
+    if command in gamestate.handlers and gamestate.handlers[command].suggest != nil:
+      gameState.input.suggestion = gamestate.handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
+  else: # We search top level commands
+    iterator handlerStrKeys(gameState: GameState): string =
+      for key in gameState.handlers.keys:
+        yield string key
+    gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 
 
 proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""

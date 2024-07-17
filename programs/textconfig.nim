@@ -61,14 +61,11 @@ proc handleTextChange(gamestate: var GameState, input: string) =
 
 proc textSuggest(gameState: GameState, input: string, ind: var int): string =
   const names = static(validNames)
-  if input.suggestIndex() == 2:
+  case input.suggestIndex()
+  of 0, 1:
     suggestNext(names.items, input, ind)
   else:
     ""
-
-
-
-
 
 const manual = """
 <event>

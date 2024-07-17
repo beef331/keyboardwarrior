@@ -129,6 +129,7 @@ proc draw() =
       screenShader.setUniform("fontHeight", gameState.buffer.fontSize, required = false)
       screenShader.setUniform("time", time, required = false)
       screenShader.setUniform("screenSize", scrSize, required = false)
+      screenShader.setUniform("curve", gameState.curveAmount)
       render(rectModel)
 
 addLoggers("keyboardwarrior")

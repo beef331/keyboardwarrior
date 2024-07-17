@@ -24,7 +24,7 @@ template suggestNext*(iter: iterable[string], input: string, ind: var int): stri
     foundInds = 0
 
   for name in iter:
-    if name.insensitiveStartsWith toComplete:
+    if name.insensitiveStartsWith(toComplete) or toComplete.len == 0:
       if foundInds == (ind + 1):
         found = true
         inc ind
@@ -39,7 +39,10 @@ template suggestNext*(iter: iterable[string], input: string, ind: var int): stri
   res
 
 proc suggestIndex*(input: string): int =
-  for _ in input.rSplit(Whitespace): # Not ideal but less allocaty than `split: seq[string]`
+  for word in input.rSplit(Whitespace): # Not ideal but less allocaty than `split: seq[string]`
+    if word.len > 0:
+      inc result
+  if input.endsWith(' '):
     inc result
 
 proc command*(
