@@ -1,10 +1,11 @@
 import gamestates
-import std/[strscans, setutils]
+import std/[strscans, setutils, strbasics]
 import "$projectdir"/data/[spaceentity, insensitivestrings]
 import "$projectdir"/utils/todoer
 
 proc targetHandler(gameState: var GameState, input: string) =
-  if (let (success, bay, target) = input.scanTuple("$s$+ $s$+$."); success):
+  if (var (success, bay, target) = input.scanTuple("$s$+ $s$+$."); success):
+    target.strip()
     var found = false
     for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
       if sys.name == InsensitiveString(bay):
@@ -23,15 +24,35 @@ proc targetHandler(gameState: var GameState, input: string) =
   else:
     gameState.writeError("Expected: 'target WeaponBay Target'\n")
 
+iterator bays(gameState: GameState, hasTarget = false): string =
+  for wBay in gameState.activeShipEntity.poweredSystemsOf({WeaponBay, ToolBay}):
+    if (hasTarget and wbay.weaponTarget != "") or not hasTarget:
+      yield string wbay.name
+
+proc targetSuggest(gameState: GameState, input: string, ind: var int): string =
+  case input.suggestIndex()
+  of 2:
+
+    suggestNext(gameState.bays, input, ind)
+  of 3:
+    iterator entities(gameState: GameState): string =
+      for ent in gameState.world.allInSensors(gameState.activeShip):
+        yield ent.name
+    suggestNext(gameState.entities, input, ind)
+  else:
+    ""
+
 
 command(
   "target",
   "Sets the target of a specific weapon.",
-  targetHandler
+  targetHandler,
+  suggest = targetSuggest
 )
 
 proc fireHandler(gameState: var GameState, input: string) =
-  if (let (success, bay) = input.scanTuple("$s$+$."); success):
+  if (var (success, bay) = input.scanTuple("$s$+$."); success):
+    bay.strip()
     var found = false
     for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
       if sys.name == InsensitiveString(bay):
@@ -54,8 +75,16 @@ proc fireHandler(gameState: var GameState, input: string) =
   else:
     gameState.writeError("Expected: 'fire BayName'\n")
 
+proc fireSuggest(gameState: GameState, input: string, ind: var int): string =
+  case input.suggestIndex()
+  of 2:
+    suggestNext(gameState.bays(true), input, ind)
+  else:
+    ""
+
 command(
   "fire",
   "Toggles the fire state of a weapon bay. If active shuts it off.",
-  fireHandler
+  fireHandler,
+  suggest = fireSuggest
 )

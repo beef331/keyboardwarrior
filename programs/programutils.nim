@@ -12,6 +12,35 @@ proc insensitiveStartsWith*(a, b: openArray[char]): bool =
         return false
     true
 
+template suggestNext*(iter: iterable[string], input: string, ind: var int): string =
+  var toComplete = ""
+  for word in input.rsplit(WhiteSpace):
+    toComplete = word
+    break
+
+  var
+    res = ""
+    found = false
+    foundInds = 0
+
+  for name in iter:
+    if name.insensitiveStartsWith toComplete:
+      if foundInds == (ind + 1):
+        found = true
+        inc ind
+        res = name[toComplete.len..^1]
+        break
+      if res == "":
+        res = name[toComplete.len..^1]
+      inc foundInds
+
+  if not found:
+    ind = 0
+  res
+
+proc suggestIndex*(input: string): int =
+  for _ in input.rSplit(Whitespace): # Not ideal but less allocaty than `split: seq[string]`
+    inc result
 
 proc command*(
   name, help: string,

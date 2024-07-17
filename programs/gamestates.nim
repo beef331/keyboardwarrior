@@ -254,23 +254,10 @@ proc suggest(gameState: var GameState) =
       if command in gamestate.handlers and gamestate.handlers[command].suggest != nil:
         gameState.input.suggestion = gamestate.handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
     else: # We search top level commands
-
-      var totalName: int
-      for handler in gameState.handlers.keys:
-        if handler.string.insensitiveStartsWith(input):
-          inc totalName
-
-      var found = 0
-      for handler in gameState.handlers.keys:
-        if handler.string.insensitiveStartsWith(input):
-          if found == (gameState.input.suggestionInd + 1) mod totalName:
-            inc gameState.input.suggestionInd
-            gameState.input.suggestion = handler.string[input.len..^1]
-            break
-          inc found
-
-      if gameState.input.suggestionInd >= 0:
-        gameState.input.suggestionInd = gameState.input.suggestionInd mod totalName
+      iterator handlerStrKeys(gameState: GameState): string =
+        for key in gameState.handlers.keys:
+          yield string key
+      gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 
 
 proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""
