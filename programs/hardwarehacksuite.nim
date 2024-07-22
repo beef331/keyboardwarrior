@@ -1,4 +1,4 @@
-import ../screenutils/texttables
+import ../screenutils/[texttables, progressbars]
 import pkg/truss3D/inputs
 import std/[algorithm, strutils, math, random, sets, strutils]
 import gamestates
@@ -64,11 +64,13 @@ proc put*(buffer: var Buffer, gameState: var GameState, hwHack: HardwareHack) =
         [buffer.properties, buffer.properties, GlyphProperties(foreground: parseHtmlColor"red")]
   buffer.printTable(hwHack.guesses, entryProperties = entryProps)
   if hwHack.isHacking:
-    buffer.put "["
-    let progress = int hwHack.hackTime / hwHack.timeToHack * (buffer.lineWidth.float32 - 2)
-    buffer.put "=".repeat(progress)
-    buffer.put " ".repeat(buffer.lineWidth - 2 - progress)
-    buffer.put "]"
+    buffer.progressBar(
+      hwHack.hackTime / hwHack.timeToHack, buffer.lineWidth - 2,
+      gradient = [
+          (GlyphProperties(foreground: parseHtmlColor"red", sineStrength: 10, sineSpeed: 10), 0f),
+          (GlyphProperties(foreground: parseHtmlColor"lime"), 1f)
+      ]
+    )
 
   if not hwHack.isHacking:
     buffer.put "Id to guess: "
