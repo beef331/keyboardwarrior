@@ -299,18 +299,23 @@ proc update*(gameState: var GameState, dt: float) =
     gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
       gameState.buffer.put gameState.lastFpsBuffer
 
+  var dirtiedInput = false
+
+  proc dirtyInput() = dirtiedInput = true
 
   if inputText().len > 0:
     gameState.input.str.insert gameState.input.pos, inputText()
     gameState.input.pos.inc inputText().len
     setInputText("")
     gameState.clearSuggestion()
+    dirtyInput()
 
 
   if KeyCodeBackspace.isDownRepeating() and gameState.input.pos > 0 and gameState.input.str.len > 0:
     gameState.input.str.delete(gameState.input.pos - 1 .. gameState.input.pos - 1)
     dec gameState.input.pos
     gameState.clearSuggestion()
+    dirtyInput()
 
 
   if KeycodeLeft.isDownRepeating:
@@ -322,9 +327,10 @@ proc update*(gameState: var GameState, dt: float) =
     else:
       gameState.input.pos = min(gameState.input.pos + 1, gameState.input.str.len)
 
+
   if KeycodeTab.isDownRepeating():
     gameState.suggest()
-
+    dirtyInput()
 
   if not gamestate.world.isReady:
     gamestate.buffer.setPosition(0, 0)
@@ -363,6 +369,7 @@ proc update*(gameState: var GameState, dt: float) =
             gameState.takeSuggestion()
           else:
             gameState.dispatchCommand()
+          dirtyInput()
 
         if KeyCodeUp.isDownRepeating(): # Up History
           inc gameState.historyPos
@@ -372,6 +379,7 @@ proc update*(gameState: var GameState, dt: float) =
           else:
             gamestate.input.str = ""
             gameState.input.pos = gameState.input.str.len
+          dirtyInput()
 
         if KeyCodeDown.isDownRepeating(): # Down History
           dec gamestate.historyPos
@@ -381,10 +389,11 @@ proc update*(gameState: var GameState, dt: float) =
           else:
             gamestate.input.str = ""
             gameState.input.pos = gameState.input.str.len
+          dirtyInput()
 
         gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
 
-        if not gameState.inProgram:
+        if not gameState.inProgram and dirtiedInput:
           gameState.buffer.clearLine()
           gameState.buffer.put(">")
           if gameState.input.suggestion.len > 0:
