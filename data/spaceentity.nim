@@ -165,7 +165,7 @@ proc init*(world: var World, playerName, seed: string) =
     )
   world.activeChunk = Chunk(entities: qt, nameToEntityInd: {insStr playerName: world.player}.toTable())
 
-  const entityNames = ["Freighter", "Asteroid", "Carrier", "Hauler", "Unknown"]
+  const entityNames = ["Freighter", "Asteroid", "Station", "Carrier", "Hauler", "Unknown"]
 
   for _ in 0..1000:
     let
@@ -178,7 +178,15 @@ proc init*(world: var World, playerName, seed: string) =
       heading = world.randState.rand(0d..Tau)
 
     var ent = SpaceEntity(
-      kind: if selectedName == entityNames[1]: Asteroid else: Ship,
+      kind:(
+        case selectedName
+        of entityNames[1]:
+          Asteroid
+        of entityNames[2]:
+          Station
+        else:
+          Ship
+      ),
       name: name,
       x: x,
       y: y,
@@ -188,7 +196,9 @@ proc init*(world: var World, playerName, seed: string) =
       heading: heading,
     )
 
-
+    if ent.kind == Station:
+      ent.velocity = 0
+      ent.maxSpeed = 0
 
     if ent.kind in {Ship, Station}:
       let powered =
@@ -202,7 +212,7 @@ proc init*(world: var World, playerName, seed: string) =
           foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
         ),
         systems: @[
-          System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
+          System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
           System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
           System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
         ]

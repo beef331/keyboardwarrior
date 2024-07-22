@@ -55,9 +55,9 @@ proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool
               GlyphProperties(foreground: parseHtmlColor"red")
             else:
               gameState.buffer.properties
-          size = 3f + 9f * float32(entry.kind != Projectile)
+          size = 3f + 9f * float32(entry.kind != Projectile) + (float32(entry.kind == Station) * 4)
 
-        gameState.buffer.drawBox(x, y, size * (1 - (realDist / sensorRange.float32)), props = color)
+        gameState.buffer.drawBox(x, y, size, props = color)
         if entry.kind != Projectile:
           gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f, props = color)
 
