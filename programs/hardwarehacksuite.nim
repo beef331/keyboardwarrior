@@ -134,15 +134,18 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
     gameState.buffer.put(gameState, hwHack)
 
 proc onExit*(hw: var HardwareHack, gameState: GameState) = discard
-proc name*(hw: HardwareHack): string = hw.name & hw.target
+proc name*(hw: HardwareHack): string = hw.name
 proc getFlags(_: HardwareHack): ProgramFlags = {}
 
 
 
 proc hhs(gamestate: var GameState, input: string) =
-  let input = input.strip()
-  if gameState.hasProgram("hhs" & input):
-    gameState.enterProgram("hhs" & input)
+  let
+    input = input.strip()
+    theName = "hhs" & input
+
+  if gameState.hasProgram(theName):
+    gameState.enterProgram(theName)
   elif gameState.entityExists(input):
     if gameState.getEntity(input).kind in {Ship, Station}:
       if gameState.getEntity(input).hasPoweredSystem(Hacker):

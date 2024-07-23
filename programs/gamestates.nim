@@ -47,7 +47,7 @@ type
       ## [^1] is active
       ## [0] is the player's
 
-    programs: Table[InsensitiveString, Traitor[Program]]
+    programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
     activeProgram: InsensitiveString
     handlers: Table[InsensitiveString, Command]
 
@@ -87,25 +87,32 @@ proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
   (gameState.programX, gameState.programY) = gamestate.buffer.getPosition()
   gameState.buffer.clearTo(gameState.programY)
 
-  let programName = InsensitiveString gameState.activeShip & program.name()
+  var programName = InsensitiveString program.name()
+  discard gamestate.programs.hasKeyOrPut(gameState.activeShip, initTable[InsensitiveString, Traitor[Program]]())
+  gamestate.programs[gameState.activeShip][programName] = program
   gameState.activeProgram = programName
 
-  if programName notin gameState.programs:
-    gameState.programs[programName] = program
-
 proc enterProgram*(gameState: var GameState, program: sink string) =
-  let programName = gameState.activeShip & program
-  gameState.activeProgram = InsensitiveString programName
+  gameState.activeProgram = InsensitiveString program
+
+
+proc activeProgramTrait(gameState: GameState): Traitor[Program] =
+  if gameState.activeShip in gameState.programs and gameState.activeProgram in gameState.programs[gameState.activeShip]:
+    gameState.programs[gameState.activeShip][gameState.activeProgram]
+  else:
+    nil
+
 
 proc exitProgram*(gameState: var GameState) =
-  gameState.programs[gameState.activeProgram].onExit(gameState)
+  gameState.activeProgramTrait.onExit(gameState)
   gameState.activeProgram = insStr""
   gameState.buffer.put ">"
   gamestate.buffer.showCursor(0)
   gameState.input.pos = 0
   gameState.input.str.setLen(0)
 
-proc hasProgram*(gameState: var GameState, name: string): bool = name.InsensitiveString in gameState.programs
+proc hasProgram*(gameState: var GameState, name: string): bool =
+  gameState.activeShip in gameState.programs and name.InsensitiveString in gameState.programs[gameState.activeShip]
 
 proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.handlers
 proc getCommand*(gameState: var GameState, name: string): lent Command = gameState.handlers[InsensitiveString(name)]
@@ -223,6 +230,42 @@ proc init*(_: typedesc[GameState]): GameState =
 
   )
 
+
+  result.add Command(
+    name: "programs",
+    help: "Lists all running programs for the current ship",
+    handler: (
+      proc(gameState: var GameState, input: string) =
+        if input.isEmptyOrWhitespace():
+          if gameState.activeShip in gameState.programs:
+            for key in gameState.programs[gameState.activeShip].keys:
+              gameState.buffer.put(key)
+              gameState.buffer.newLine()
+          else:
+            gameState.buffer.put("No programs running on this ship.")
+            gameState.buffer.newLine()
+        else:
+          gameState.activeProgram = InsensitiveString input.strip()
+          if gameState.activeShip notin gameState.programs or gameState.activeProgram notin gameState.programs[gameState.activeShip]:
+            gameState.writeError("No program found named '" & gameState.activeProgram & "' for the present ship.")
+            gameState.activeProgram = InsensitiveString""
+    ),
+    suggest:(
+      proc(gameState: GameState, input: string, ind: var int): string =
+        iterator programsIter(gameState: GameState): string =
+          if gameState.activeShip in gameState.programs:
+            for key in gameState.programs[gameState.activeShip].keys:
+              yield string key
+        case input.suggestIndex()
+        of 0, 1:
+          suggestNext(gameState.programsIter, input, ind)
+        else:
+          ""
+    ),
+
+  )
+
+
   for command in programutils.commands():
     result.add command
 
@@ -283,7 +326,7 @@ proc suggest(gameState: var GameState) =
 proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""
 proc currentProgramFlags(gameState: GameState): ProgramFlags =
   if gameState.inProgram:
-    gameState.programs[gameState.activeProgram].getFlags()
+    gameState.activeProgramTrait.getFlags()
   else:
     {}
 
@@ -356,9 +399,10 @@ proc update*(gameState: var GameState, dt: float) =
     gamestate.world.update(dt)
 
 
-    for key, program in gamestate.programs:
-      if key != gameState.activeProgram:
-        program.update(gamestate, dt, false)
+    for programs in gamestate.programs.mvalues:
+      for key, program in programs.mpairs:
+        if key != gameState.activeProgram:
+          program.update(gamestate, dt, false)
 
     if not gamestate.inProgram or Blocking in gamestate.currentProgramFlags:
       if KeyCodePageUp.isDownRepeating(): # Scrollup
@@ -411,7 +455,7 @@ proc update*(gameState: var GameState, dt: float) =
         gameState.buffer.clearTo(gameState.programY)
         gameState.buffer.cameraPos = gameState.programY
 
-      gameState.programs[gameState.activeProgram].update(gamestate, dt, true)
+      gameState.activeProgramTrait.update(gamestate, dt, true)
 
     if gameState.inProgram:
       if KeyCodeEscape.isDown:
