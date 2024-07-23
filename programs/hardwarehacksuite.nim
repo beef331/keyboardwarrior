@@ -4,12 +4,18 @@ import std/[algorithm, strutils, math, random, sets, strutils]
 import gamestates
 import ../data/spaceentity
 
+proc formatGuess(b: bool): string =
+  if b:
+    "[X]"
+  else:
+    "[ ]"
+
 type
   HackGuess = object
     id: int
     password: string
     timeToDeny: int
-    guessed: bool
+    guessed {.tableStringify: formatGuess.}: bool
 
   HardwareHack* = object
     name: string
@@ -85,6 +91,7 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
   if active and not hwHack.isHacking:
 
     if KeyCodeReturn.isDownRepeating:
+      hwHack.errorMsg = ""
       try:
         let guess = parseInt(gameState.popInput())
         if guess in 0..hwHack.guesses.high:
@@ -115,6 +122,8 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
       hwHack.currentGuess.timeToDeny = int(hwHack.timeToHack)
 
   if active:
+    if hwHack.isHacking:
+      discard gameState.popInput()
     for guess in hwHack.guesses:
       if guess.guessed and hwHack.currentGuess.timeToDeny == hwHack.actualPassword.len:
         assert gameState.takeControlOf(hwHack.target)
