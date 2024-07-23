@@ -320,12 +320,16 @@ proc update*(gameState: var GameState, dt: float) =
 
   if KeycodeLeft.isDownRepeating:
     gameState.input.pos = max(gameState.input.pos - 1, 0)
+    dirtyInput()
+
 
   if KeycodeRight.isDownRepeating:
     if gameState.input.suggestionInd != -1:
       gameState.takeSuggestion()
     else:
       gameState.input.pos = min(gameState.input.pos + 1, gameState.input.str.len)
+    dirtyInput()
+
 
 
   if KeycodeTab.isDownRepeating():
