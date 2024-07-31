@@ -50,7 +50,7 @@ type
 
   GameState* = object
     screens: seq[Screen]
-    currentScreen: int
+    currentScreen*: int
 
     programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
     handlers: Table[InsensitiveString, Command]
@@ -297,7 +297,8 @@ proc init*(_: typedesc[GameState]): GameState =
         lineWidth: gameState.buffer.lineWidth,
         lineHeight: gameState.buffer.lineHeight
       )
-      buff.initFrom(gamestate.screen.buffer)
+      #buff.initFrom(gamestate.screen.buffer)
+      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
       buff.put("")
       gameState.screens.add Screen(
         x: gameState.screen.x + gameState.buffer.lineWidth,
@@ -316,7 +317,8 @@ proc init*(_: typedesc[GameState]): GameState =
         lineHeight: gameState.buffer.lineHeight,
         properties: GlyphProperties(foreground: parseHtmlColor("White"))
       )
-      buff.initFrom(gamestate.screen.buffer)
+      #buff.initFrom(gamestate.screen.buffer)
+      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
       buff.put("")
       gameState.screens.add Screen(
         x: gameState.screen.x,

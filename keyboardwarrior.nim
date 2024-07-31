@@ -29,7 +29,8 @@ proc init =
 
 
 proc draw() =
-  for screen in gameState.mscreens:
+  for i, screen in gameState.screenPairs:
+
     screen.buffer.render()
 
     let
@@ -53,7 +54,8 @@ proc draw() =
         screenShader.setUniform("fontHeight", screen.buffer.fontSize, required = false)
         screenShader.setUniform("time", time, required = false)
         screenShader.setUniform("screenSize", scrSize, required = false)
-        screenShader.setUniform("curve", gameState.curveAmount)
+        #screenShader.setUniform("curve", gameState.curveAmount)
+        screenShader.setUniform("activeScreen", float32(i == gameState.currentScreen))
         render(rectModel)
 
 

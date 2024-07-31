@@ -278,7 +278,6 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
         Rune('+')
       else:
         glyph.rune
-
     entry = buff.atlas[].runeEntry(rune)
     theFg = buff.getColorIndex(prop.foreground)
     theBg = buff.getColorIndex(prop.background)
