@@ -2,11 +2,9 @@ import ../screenutils/screenrenderer
 import ../data/[spaceentity, insensitivestrings]
 import pkg/[traitor, chroma, pixie]
 import std/[tables, strutils, hashes, random]
-import pkg/truss3D/inputs
+import pkg/truss3D/[inputs]
 
 export screenrenderer, chroma, pixie
-
-const maxTextSize* = 80
 
 type
   ProgramFlag* = enum
@@ -39,9 +37,13 @@ type
     suggestionInd*: int = -1
     suggestion*: string
 
+  Screen = object
+    x*, y*: int
+    buffer*: Buffer
 
   GameState* = object
-    buffer*: Buffer
+    screens: seq[Screen]
+    currentScreen: int
 
     shipStack: seq[string] ## Stack of names for which ship is presently controlled
       ## [^1] is active
@@ -59,6 +61,9 @@ type
     world*: World
 
 
+    screenWidth*: int # character size of current screen
+    screenHeight*: int
+
     fpsX, fpsY: int # Where we write to
     lastFpsBuffer: seq[Glyph]
 
@@ -71,6 +76,16 @@ implTrait Program
 iterator commands*(gameState: GameState): Command =
   for command in gamestate.handlers.values:
     yield command
+
+iterator screens*(gameState: var GameState): var Screen =
+  for screen in gameState.screens.mitems:
+    yield screen
+
+proc screen(gameState: var GameState): var Screen =
+  gameState.screens[gameState.currentScreen]
+
+proc buffer*(gameState: var GameState): var Buffer =
+  gameState.screen.buffer
 
 proc writeError*(gameState: var GameState, msg: string) =
   gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
@@ -262,15 +277,41 @@ proc init*(_: typedesc[GameState]): GameState =
         else:
           ""
     ),
-
   )
+
+  result.add Command(
+    name: "splitv",
+    help: "Splits the current terminal vertically. The left side maintains history",
+    handler: proc(gameState: var GameState, _: string) =
+      gameState.buffer.setLineWidth gameState.buffer.lineWidth div 2
+      var buff = Buffer(lineWidth: gameState.buffer.lineWidth, lineHeight: gameState.buffer.lineHeight)
+      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+      buff.put(">")
+      gameState.screens.add Screen(x: gameState.screen.x + gameState.buffer.lineWidth, y: gameState.screen.y, buffer: buff)
+  )
+  result.add Command(
+    name: "splith",
+    help: "Splits the current terminal horizontally. The top side maintains history",
+    handler: proc(gameState: var GameState, _: string) =
+      gameState.buffer.setLineHeight gameState.buffer.lineHeight div 2
+      var buff = Buffer(lineWidth: gameState.buffer.lineWidth, lineHeight: gameState.buffer.lineHeight)
+      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+      gameState.screens.add Screen(x: gameState.screen.x, y: gameState.screen.y + gameState.buffer.lineHeight, buffer: buff)
+      gameState.screens[^1].buffer.put(">\n")
+  )
+
 
 
   for command in programutils.commands():
     result.add command
 
-  result.buffer = Buffer(lineWidth: 60, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor("White")))
-  result.buffer.initResources("PublicPixel.ttf", true)
+  result.screenWidth = 60
+  result.screenHeight = 40
+
+  var buff = Buffer(lineWidth: result.screenWidth, lineHeight: result.screenHeight, properties: GlyphProperties(foreground: parseHtmlColor("White")))
+  buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+  result.screens.add Screen(buffer: buff)
+
 
 proc clearSuggestion(gameState: var GameState) =
   gamestate.input.suggestion = ""
@@ -331,6 +372,21 @@ proc currentProgramFlags(gameState: GameState): ProgramFlags =
     {}
 
 proc update*(gameState: var GameState, dt: float) =
+  var dirtiedInput = false
+
+  proc dirtyInput() = dirtiedInput = true
+
+  if inputText().len > 0:
+    gameState.input.str.insert gameState.input.pos, inputText()
+    gameState.input.pos.inc inputText().len
+    setInputText("")
+    gameState.clearSuggestion()
+    dirtyInput()
+
+  if KeyCodeLAlt.isDownRepeating():
+    gameState.currentScreen = (gameState.currentScreen + 1) mod gameState.screens.len
+    dirtyInput()
+
   let
     props = gameState.buffer.properties
     startCount = gameState.shipStack.len
@@ -342,16 +398,6 @@ proc update*(gameState: var GameState, dt: float) =
     gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
       gameState.buffer.put gameState.lastFpsBuffer
 
-  var dirtiedInput = false
-
-  proc dirtyInput() = dirtiedInput = true
-
-  if inputText().len > 0:
-    gameState.input.str.insert gameState.input.pos, inputText()
-    gameState.input.pos.inc inputText().len
-    setInputText("")
-    gameState.clearSuggestion()
-    dirtyInput()
 
 
   if KeyCodeBackspace.isDownRepeating() and gameState.input.pos > 0 and gameState.input.str.len > 0:

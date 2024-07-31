@@ -38,5 +38,5 @@ void main() {
   vec2 uv = barrelUv(fUv);
   float closeness = mod(uv.y, screenTexelSize.y) / screenTexelSize.y;
 
-  frag_colour = texture(tex, uv) * pow(closeness, 0.2);
+  frag_colour = texture(tex, uv);// * pow(closeness, 0.2);
 }

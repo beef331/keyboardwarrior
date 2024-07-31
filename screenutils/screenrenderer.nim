@@ -158,7 +158,7 @@ proc recalculateBuffer*(buff: var Buffer) =
     buff.useFrameBuffer = true
     buff.frameBufferSetup = true
 
-proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true) =
+proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true, fontSize = 80) =
   buff.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
   buff.textShader = loadShader(guiVert, guiFrag)
   buff.graphicShader = loadShader(guiVert, shapeFrag)
@@ -169,7 +169,7 @@ proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, 
 
   buff.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
   buff.colorSsbo = genSsbo[seq[Color]](1)
-  buff.atlas.font.size = 64
+  buff.atlas.font.size = float fontSize
   buff.noise =
     if seedNoise:
       newOpenSimplex()
@@ -228,6 +228,10 @@ proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 
 proc propIsVisible(buff: Buffer, prop: GlyphProperties): bool =
   prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0
+
+proc runeSize*(buffer: var Buffer): Vec2 =
+  let entry = buffer.atlas.runeEntry(Rune '+')
+  vec2(entry.rect.w, entry.rect.h)
 
 proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int, scale = 1f32, offset: static bool = false): (bool, Rune, Vec2) =
   let

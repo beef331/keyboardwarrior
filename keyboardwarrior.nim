@@ -28,6 +28,35 @@ proc init =
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
 
+proc draw() =
+  for screen in gameState.screens:
+    screen.buffer.render()
+
+    let
+      scrSize = screenSize().vec2
+      scale = min(scrSize.x / gameState.screenWidth.float32, scrSize.y / gameState.screenHeight.float32)
+      sizeX = (scale * gameState.buffer.lineWidth.float32)
+      sizeY = (scale * gameState.buffer.lineHeight.float32)
+      size = vec2(sizeX, sizeY) * 2 / scrSize
+
+    var pos = vec3((screen.x.float32 * screen.buffer.runeSize.x) / 2, (scrSize.y - sizeY) / 2, 1) / vec3(scrSize, 1)
+    pos.y *= -1
+    pos.xy = pos.xy * 2f + vec2(-1f, 1f - size.y)
+
+    let mat = translate(pos) * scale(vec3(size, 0))
+
+    if screenShader.Gluint > 0:
+      with screenShader:
+        screenShader.setUniform("tex", screen.buffer.getFrameBufferTexture(), required = false)
+        screenShader.setUniform("mvp", mat, required = false)
+        screenShader.setUniform("fontHeight", screen.buffer.fontSize, required = false)
+        screenShader.setUniform("time", time, required = false)
+        screenShader.setUniform("screenSize", scrSize, required = false)
+        screenShader.setUniform("curve", gameState.curveAmount)
+        render(rectModel)
+
+
+
 when not defined(testing):
   proc update(dt: float32) =
     gamestate.update(dt)
@@ -104,33 +133,6 @@ else:
       inputs.inputs.simulateClear(KeycodePageDown)
 
     quit errorCode
-
-proc draw() =
-
-  gamestate.buffer.render()
-
-  let
-    scrSize = screenSize().vec2
-    scale = min(scrSize.x / gameState.buffer.lineWidth.float32, scrSize.y / gameState.buffer.lineHeight.float32)
-    sizeX = (scale * gameState.buffer.lineWidth.float32)
-    sizeY = (scale * gameState.buffer.lineHeight.float32)
-    size = vec2(sizeX, sizeY) * 2 / scrSize
-
-  var pos = vec3((scrSize.x - sizeX) / 2, (scrSize.y - sizeY) / 2, 1) / vec3(scrSize, 1)
-  pos.y *= -1
-  pos.xy = pos.xy * 2f + vec2(-1f, 1f - size.y)
-
-  let mat = translate(pos) * scale(vec3(size, 0))
-
-  if screenShader.Gluint > 0:
-    with screenShader:
-      screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture(), required = false)
-      screenShader.setUniform("mvp", mat, required = false)
-      screenShader.setUniform("fontHeight", gameState.buffer.fontSize, required = false)
-      screenShader.setUniform("time", time, required = false)
-      screenShader.setUniform("screenSize", scrSize, required = false)
-      screenShader.setUniform("curve", gameState.curveAmount)
-      render(rectModel)
 
 addLoggers("keyboardwarrior")
 initTruss("Something", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)
