@@ -40,17 +40,19 @@ type
   Screen = object
     x*, y*: int
     buffer*: Buffer
+    activeProgram: InsensitiveString
+    input: TextInput
+    programX: int
+    programY: int
+    shipStack: seq[string] ## Stack of names for which ship is presently controlled
+      ## [^1] is active
+      ## [0] is the player's
 
   GameState* = object
     screens: seq[Screen]
     currentScreen: int
 
-    shipStack: seq[string] ## Stack of names for which ship is presently controlled
-      ## [^1] is active
-      ## [0] is the player's
-
     programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
-    activeProgram: InsensitiveString
     handlers: Table[InsensitiveString, Command]
 
     history: seq[string]
@@ -67,8 +69,6 @@ type
     fpsX, fpsY: int # Where we write to
     lastFpsBuffer: seq[Glyph]
 
-    input: TextInput
-
     curveAmount*: float32 # The curve amount
 
 implTrait Program
@@ -77,12 +77,22 @@ iterator commands*(gameState: GameState): Command =
   for command in gamestate.handlers.values:
     yield command
 
-iterator screens*(gameState: var GameState): var Screen =
+iterator mscreens*(gameState: var GameState): var Screen =
   for screen in gameState.screens.mitems:
     yield screen
 
+iterator screenPairs*(gameState: var GameState): (int, var Screen) =
+  for i in 0..gameState.screens.high:
+    yield (i, gameState.screens[i])
+
 proc screen(gameState: var GameState): var Screen =
   gameState.screens[gameState.currentScreen]
+
+proc screen(gameState: GameState): lent Screen =
+  gameState.screens[gameState.currentScreen]
+
+proc input(gameState: GameState): lent TextInput = gameState.screen.input
+proc input(gameState: var GameState): var TextInput = gameState.screen.input
 
 proc buffer*(gameState: var GameState): var Buffer =
   gameState.screen.buffer
@@ -90,7 +100,8 @@ proc buffer*(gameState: var GameState): var Buffer =
 proc writeError*(gameState: var GameState, msg: string) =
   gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
 
-proc activeShip*(gameState: GameState): lent string = gameState.shipStack[gameState.shipStack.high]
+proc activeShip*(gameState: GameState): lent string =
+  gameState.screen.shipStack[gameState.screen.shipStack.high]
 
 proc activeShipEntity*(gameState: GameState): lent SpaceEntity =
   gameState.world.getEntity(gameState.activeShip)
@@ -99,29 +110,27 @@ proc activeShipEntity*(gameState: var GameState): var SpaceEntity =
   gameState.world.getEntity(gameState.activeShip)
 
 proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
-  (gameState.programX, gameState.programY) = gamestate.buffer.getPosition()
-  gameState.buffer.clearTo(gameState.programY)
+  (gameState.screen.programX, gameState.screen.programY) = gamestate.buffer.getPosition()
+  gameState.buffer.clearTo(gameState.screen.programY)
 
   var programName = InsensitiveString program.name()
   discard gamestate.programs.hasKeyOrPut(gameState.activeShip, initTable[InsensitiveString, Traitor[Program]]())
   gamestate.programs[gameState.activeShip][programName] = program
-  gameState.activeProgram = programName
+  gameState.screen.activeProgram = programName
 
 proc enterProgram*(gameState: var GameState, program: sink string) =
-  gameState.activeProgram = InsensitiveString program
+  gameState.screen.activeProgram = InsensitiveString program
 
 
-proc activeProgramTrait(gameState: GameState): Traitor[Program] =
-  if gameState.activeShip in gameState.programs and gameState.activeProgram in gameState.programs[gameState.activeShip]:
-    gameState.programs[gameState.activeShip][gameState.activeProgram]
+proc activeProgramTrait(gameState: GameState, screen: Screen): Traitor[Program] =
+  if gameState.activeShip in gameState.programs and screen.activeProgram in gameState.programs[gameState.activeShip]:
+    gameState.programs[gameState.activeShip][screen.activeProgram]
   else:
     nil
 
-
 proc exitProgram*(gameState: var GameState) =
-  gameState.activeProgramTrait.onExit(gameState)
-  gameState.activeProgram = insStr""
-  gameState.buffer.put ">"
+  gameState.activeProgramTrait(gamestate.screen).onExit(gameState)
+  gameState.screen.activeProgram = insStr""
   gamestate.buffer.showCursor(0)
   gameState.input.pos = 0
   gameState.input.str.setLen(0)
@@ -143,9 +152,9 @@ proc getEntity*(gameState: var GameState, name: string): var SpaceEntity =
 
 proc takeControlOf*(gameState: var GameState, name: string): bool =
   ## takes control of a ship returning true if it can be found and connected to
-  result = gameState.world.entityExists(name) and name != gameState.shipStack[^1] # O(N) Send help!
+  result = gameState.world.entityExists(name) and name != gameState.screen.shipStack[^1] # O(N) Send help!
   if result:
-    gameState.shipStack.add name
+    gameState.screen.shipStack.add name
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
 proc randState*(gameState: var GameState): var Rand = gameState.world.randState
@@ -207,11 +216,11 @@ proc init*(_: typedesc[GameState]): GameState =
     help: "Exits the currently controlled ship.",
     handler: proc(gameState: var GameState, input: string) =
       if input == "player":
-        gameState.shipStack.setLen(1)
-      elif gameState.shipStack.len > 1:
-        gameState.buffer.properties = gameState.getEntity(gameState.shipStack[^2]).shipData.glyphProperties
+        gameState.screen.shipStack.setLen(1)
+      elif gameState.screen.shipStack.len > 1:
+        gameState.buffer.properties = gameState.getEntity(gameState.screen.shipStack[^2]).shipData.glyphProperties
         gameState.buffer.put("Exited: " & gameState.activeShip & "\n")
-        gameState.shipStack.setLen(gameState.shipStack.high)
+        gameState.screen.shipStack.setLen(gameState.screen.shipStack.high)
       else:
         gameState.buffer.put("Where do you want to go,")
         gameState.buffer.put(" SPACE?\n", GlyphProperties(
@@ -260,10 +269,10 @@ proc init*(_: typedesc[GameState]): GameState =
             gameState.buffer.put("No programs running on this ship.")
             gameState.buffer.newLine()
         else:
-          gameState.activeProgram = InsensitiveString input.strip()
-          if gameState.activeShip notin gameState.programs or gameState.activeProgram notin gameState.programs[gameState.activeShip]:
-            gameState.writeError("No program found named '" & gameState.activeProgram & "' for the present ship.")
-            gameState.activeProgram = InsensitiveString""
+          gameState.screen.activeProgram = InsensitiveString input.strip()
+          if gameState.activeShip notin gameState.programs or gameState.screen.activeProgram notin gameState.programs[gameState.activeShip]:
+            gameState.writeError("No program found named '" & gameState.screen.activeProgram & "' for the present ship.")
+            gameState.screen.activeProgram = InsensitiveString""
     ),
     suggest:(
       proc(gameState: GameState, input: string, ind: var int): string =
@@ -284,29 +293,44 @@ proc init*(_: typedesc[GameState]): GameState =
     help: "Splits the current terminal vertically. The left side maintains history",
     handler: proc(gameState: var GameState, _: string) =
       gameState.buffer.setLineWidth gameState.buffer.lineWidth div 2
-      var buff = Buffer(lineWidth: gameState.buffer.lineWidth, lineHeight: gameState.buffer.lineHeight)
-      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-      buff.put(">")
-      gameState.screens.add Screen(x: gameState.screen.x + gameState.buffer.lineWidth, y: gameState.screen.y, buffer: buff)
+      var buff = Buffer(
+        lineWidth: gameState.buffer.lineWidth,
+        lineHeight: gameState.buffer.lineHeight
+      )
+      buff.initFrom(gamestate.screen.buffer)
+      buff.put("")
+      gameState.screens.add Screen(
+        x: gameState.screen.x + gameState.buffer.lineWidth,
+        y: gameState.screen.y,
+        buffer: buff,
+        shipStack: gamestate.screen.shipStack,
+      )
   )
   result.add Command(
     name: "splith",
     help: "Splits the current terminal horizontally. The top side maintains history",
     handler: proc(gameState: var GameState, _: string) =
       gameState.buffer.setLineHeight gameState.buffer.lineHeight div 2
-      var buff = Buffer(lineWidth: gameState.buffer.lineWidth, lineHeight: gameState.buffer.lineHeight)
-      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-      gameState.screens.add Screen(x: gameState.screen.x, y: gameState.screen.y + gameState.buffer.lineHeight, buffer: buff)
-      gameState.screens[^1].buffer.put(">\n")
+      var buff = Buffer(
+        lineWidth: gameState.buffer.lineWidth,
+        lineHeight: gameState.buffer.lineHeight,
+        properties: GlyphProperties(foreground: parseHtmlColor("White"))
+      )
+      buff.initFrom(gamestate.screen.buffer)
+      buff.put("")
+      gameState.screens.add Screen(
+        x: gameState.screen.x,
+        y: gameState.screen.y + gameState.buffer.lineHeight,
+        buffer: buff,
+        shipStack: gamestate.screen.shipStack,
+      )
   )
-
-
 
   for command in programutils.commands():
     result.add command
 
-  result.screenWidth = 60
-  result.screenHeight = 40
+  result.screenWidth = 100
+  result.screenHeight = 60
 
   var buff = Buffer(lineWidth: result.screenWidth, lineHeight: result.screenHeight, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   buff.initResources("PublicPixel.ttf", true, fontSize = 80)
@@ -364,17 +388,26 @@ proc suggest(gameState: var GameState) =
     gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 
 
-proc inProgram(gameState: GameState): bool = gameState.activeProgram != ""
-proc currentProgramFlags(gameState: GameState): ProgramFlags =
-  if gameState.inProgram:
-    gameState.activeProgramTrait.getFlags()
+proc inProgram(screen: Screen): bool = screen.activeProgram != ""
+proc currentProgramFlags(gameState: GameState, screen: Screen): ProgramFlags =
+  if screen.inProgram:
+    let prog = gameState.activeProgramTrait(screen)
+    if prog == nil:
+      {}
+    else:
+      prog.getFlags()
   else:
     {}
 
 proc update*(gameState: var GameState, dt: float) =
   var dirtiedInput = false
-
   proc dirtyInput() = dirtiedInput = true
+
+
+  if KeyCodeLAlt.isDownRepeating():
+    gameState.currentScreen = (gameState.currentScreen + 1) mod gameState.screens.len
+    dirtyInput()
+
 
   if inputText().len > 0:
     gameState.input.str.insert gameState.input.pos, inputText()
@@ -383,22 +416,11 @@ proc update*(gameState: var GameState, dt: float) =
     gameState.clearSuggestion()
     dirtyInput()
 
-  if KeyCodeLAlt.isDownRepeating():
-    gameState.currentScreen = (gameState.currentScreen + 1) mod gameState.screens.len
-    dirtyInput()
 
-  let
-    props = gameState.buffer.properties
-    startCount = gameState.shipStack.len
+  let startShipCount = gameState.screen.shipStack.len
 
-  if gameState.shipStack.len > 0:
+  if startShipCount > 0:
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
-
-  if gameState.buffer.mode == Text:
-    gamestate.buffer.withPos(gameState.fpsX, gameState.fpsY):
-      gameState.buffer.put gameState.lastFpsBuffer
-
-
 
   if KeyCodeBackspace.isDownRepeating() and gameState.input.pos > 0 and gameState.input.str.len > 0:
     gameState.input.str.delete(gameState.input.pos - 1 .. gameState.input.pos - 1)
@@ -434,93 +456,95 @@ proc update*(gameState: var GameState, dt: float) =
 
     if KeyCodeReturn.isDownRepeating() and gameState.input.str.len > 0:
       let name = gameState.popInput()
-      gameState.shipStack.add name
+      gameState.screen.shipStack.add name
       gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
       gameState.buffer.put ">"
       gameState.showInput()
 
-
+    gameState.screen.buffer.upload(dt)
   else:
     gamestate.world.update(dt)
 
 
     for programs in gamestate.programs.mvalues:
       for key, program in programs.mpairs:
-        if key != gameState.activeProgram:
+        var found = false
+        for screen in gameState.screens:
+          if key == screen.activeProgram:
+            found = true
+            break
+        if not found:
           program.update(gamestate, dt, false)
 
-    if not gamestate.inProgram or Blocking in gamestate.currentProgramFlags:
-      if KeyCodePageUp.isDownRepeating(): # Scrollup
-        gameState.buffer.scrollUp()
 
-      if KeyCodePageDown.isDownRepeating(): # Scroll Down
-        gameState.buffer.scrollDown()
+    for screenInd, screen in gamestate.screenPairs:
+      let
+        isActiveScreen = gameState.currentScreen == screenInd
+        oldScreen = gameState.currentScreen
+      gameState.currentScreen = screenInd
+      if not screen.inProgram or Blocking in gameState.currentProgramFlags(screen):
+        if KeyCodePageUp.isDownRepeating() and isActiveScreen: # Scrollup
+          gameState.buffer.scrollUp()
 
-      if Blocking notin gameState.currentProgramFlags:
-        if KeyCodeReturn.isDownRepeating(): # Enter
-          if gameState.input.suggestion.len > 0:
-            gameState.takeSuggestion()
-          else:
-            gameState.dispatchCommand()
-          dirtyInput()
+        if KeyCodePageDown.isDownRepeating() and isActiveScreen: # Scroll Down
+          gameState.buffer.scrollDown()
 
-        if KeyCodeUp.isDownRepeating(): # Up History
-          inc gameState.historyPos
-          if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
-            gameState.input.str = gameState.history[^gameState.historyPos]
-            gameState.input.pos = gameState.input.str.len
-          else:
-            gamestate.input.str = ""
-            gameState.input.pos = gameState.input.str.len
-          dirtyInput()
+        if Blocking notin gameState.currentProgramFlags(screen):
+          if KeyCodeReturn.isDownRepeating() and isActiveScreen: # Enter
+            if gameState.input.suggestion.len > 0:
+              gameState.takeSuggestion()
+            else:
+              gameState.dispatchCommand()
+            dirtyInput()
 
-        if KeyCodeDown.isDownRepeating(): # Down History
-          dec gamestate.historyPos
-          if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
-            gameState.input.str = gameState.history[^gameState.historyPos]
-            gameState.input.pos = gameState.input.str.len
-          else:
-            gamestate.input.str = ""
-            gameState.input.pos = gameState.input.str.len
-          dirtyInput()
+          if KeyCodeUp.isDownRepeating() and isActiveScreen: # Up History
+            inc gameState.historyPos
+            if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
+              gameState.input.str = gameState.history[^gameState.historyPos]
+              gameState.input.pos = gameState.input.str.len
+            else:
+              gamestate.input.str = ""
+              gameState.input.pos = gameState.input.str.len
+            dirtyInput()
 
-        gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
+          if KeyCodeDown.isDownRepeating() and isActiveScreen: # Down History
+            dec gamestate.historyPos
+            if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
+              gameState.input.str = gameState.history[^gameState.historyPos]
+              gameState.input.pos = gameState.input.str.len
+            else:
+              gamestate.input.str = ""
+              gameState.input.pos = gameState.input.str.len
+            dirtyInput()
 
-        if not gameState.inProgram and dirtiedInput:
-          gameState.buffer.clearLine()
-          gameState.buffer.put(">")
-          if gameState.input.suggestion.len > 0:
-            gameState.showInput({WithCursor, WithSuggestion})
-          else:
-            gameState.showInput()
+          gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
 
-    else:
-      gameState.buffer.hideCursor()
-      if gameState.buffer.mode == Text:
-        gameState.buffer.clearTo(gameState.programY)
-        gameState.buffer.cameraPos = gameState.programY
+          if not screen.inProgram and dirtiedInput:
+            gameState.buffer.clearLine()
+            gameState.buffer.put(">")
+            if gameState.input.suggestion.len > 0:
+              gameState.showInput({WithCursor, WithSuggestion})
+            else:
+              gameState.showInput()
 
-      gameState.activeProgramTrait.update(gamestate, dt, true)
+      else:
+        gameState.buffer.hideCursor()
+        if gameState.buffer.mode == Text:
+          gameState.buffer.clearTo(screen.programY)
+          gameState.buffer.cameraPos = screen.programY
 
-    if gameState.inProgram:
-      if KeyCodeEscape.isDown:
-        gameState.exitProgram()
+        gameState.activeProgramTrait(screen).update(gamestate, dt, true)
+
+      if screen.inProgram and isActiveScreen:
+        if KeyCodeEscape.isDown:
+          gameState.exitProgram()
+          gameState.buffer.put ">"
+          gamestate.buffer.showCursor(0)
+
+      screen.buffer.upload(dt)
+      gameState.currentScreen = oldScreen
 
 
-  let chars = " fps: " & (1f / dt).formatFloat(format = ffDecimal, precision = 2)
-  gamestate.fpsX = gameState.buffer.lineWidth - chars.len
-  gamestate.fpsY = gameState.buffer.cameraPos
-
-  if gameState.buffer.mode == Text:
-    gameState.buffer.withPos(gameState.fpsX, gamestate.fpsY):
-      gameState.lastFpsBuffer = gameState.buffer.fetchAndPut(chars, false)
-  else:
-    gameState.buffer.drawText(chars, 0f, gameState.buffer.pixelHeight.float32 * 2)
-
-  gameState.buffer.upload(dt)
-
-  if gameState.shipStack.len > 0 and startCount == gameState.shipStack.len:
+  if gameState.screen.shipStack.len > 0 and startShipCount == gameState.screen.shipStack.len:
     gameState.activeShipEntity.shipData.glyphProperties = gameState.buffer.properties
-
-  gameState.buffer.properties = props

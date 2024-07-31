@@ -126,9 +126,10 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
       discard gameState.popInput()
     for guess in hwHack.guesses:
       if guess.guessed and hwHack.currentGuess.timeToDeny == hwHack.actualPassword.len:
-        assert gameState.takeControlOf(hwHack.target)
-        gameState.buffer.put("Hacked into: " & hwHack.target & "\n")
         gameState.exitProgram()
+        assert gameState.takeControlOf(hwHack.target)
+        gameState.buffer.put("Hacked into: " & hwHack.target & "\n>")
+        gamestate.buffer.showCursor(0)
         return
 
     gameState.buffer.put(gameState, hwHack)

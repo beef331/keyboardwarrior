@@ -156,7 +156,7 @@ proc init*(world: var World, playerName, seed: string) =
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
           systems: @[
-            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 75, powerUsage: 100),
+            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50, powerUsage: 100),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
             System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
             System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100)
@@ -212,7 +212,7 @@ proc init*(world: var World, playerName, seed: string) =
           foreground: color(world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f), world.randState.rand(0.3f..1f))
         ),
         systems: @[
-          System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 100, powerUsage: 100),
+          System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50, powerUsage: 100),
           System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25, flags: powered),
           System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
         ]
