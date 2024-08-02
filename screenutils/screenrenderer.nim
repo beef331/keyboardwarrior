@@ -211,11 +211,6 @@ proc initFrom*(buff: var Buffer, source: Buffer, seedNoise = true) =
 
   buff.lineWidth = source.lineWidth
   buff.lineHeight = source.lineHeight
-  buff.atlas = source.atlas
-  buff.textShader = source.textShader
-  buff.graphicShader = source.graphicShader
-  buff.colorSsbo = source.colorssbo
-  buff.atlas.font.size = float source.fontSize
   buff.noise =
     if seedNoise:
       newOpenSimplex()

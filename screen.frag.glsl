@@ -46,9 +46,13 @@ void main() {
   vec2 uv = barrelUv(fragCoord);
   float sdf = rectangle(fUv - 0.5, vec2(0.5));
   float closeness = mod(uv.y, screenTexelSize.y) / screenTexelSize.y;
+  float borderSize = -10/ length(texSize);
   float outline = float(sdf > -10/ length(texSize));
   vec4 col = mix(vec4(0, 0.2, 0, 1), vec4(1, 1, 0, 1), (activeScreen + 1) / 2);
 
-  frag_colour = mix(texture(tex, fUv), col, outline);// * pow(closeness, 0.2);
+
+  vec2 theUv = (fUv - 0.5) * (1 - borderSize * 5) + 0.5;
+
+  frag_colour = mix(texture(tex, theUv), col, outline);// * pow(closeness, 0.2);
   //frag_colour = vec4(sdf > -5/ length(texSize));
 }

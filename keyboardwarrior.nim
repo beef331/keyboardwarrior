@@ -29,19 +29,19 @@ proc init =
 
 
 proc draw() =
-  for i, screen in gameState.screenPairs:
+  for screen in gameState.screens:
 
     screen.buffer.render()
 
     let
       scrSize = screenSize().vec2
       scale = min(scrSize.x / gameState.screenWidth.float32, scrSize.y / gameState.screenHeight.float32)
-      sizeX = (scale * screen.buffer.lineWidth.float32)
-      sizeY = (scale * screen.buffer.lineHeight.float32)
+      sizeX = (scale * screen.w)
+      sizeY = (scale * screen.h)
       size = vec2(sizeX, sizeY) / scrSize * 2 # times 2 cause the rect is only 0..1 but Opengl is -1..1
       offset = abs(vec2(scale * gameState.screenWidth.float32, scale * gameState.screenHeight.float32) - scrSize) / scrSize
 
-    var pos = vec3(screen.x.float32 * scale, screen.y.float32 * scale, 1) / vec3(scrSize, 1)
+    var pos = vec3(screen.x * scale, screen.y * scale, 1) / vec3(scrSize, 1)
     pos.y *= -1
     pos.xy = pos.xy * 2f + vec2(-1f + offset.x, 1f - size.y - offset.y)
 
@@ -55,7 +55,7 @@ proc draw() =
         screenShader.setUniform("time", time, required = false)
         screenShader.setUniform("screenSize", scrSize, required = false)
         #screenShader.setUniform("curve", gameState.curveAmount)
-        screenShader.setUniform("activeScreen", float32(i == gameState.currentScreen))
+        screenShader.setUniform("activeScreen", float32(screen == gameState.screen))
         render(rectModel)
 
 

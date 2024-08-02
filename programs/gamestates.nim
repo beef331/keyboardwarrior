@@ -37,20 +37,41 @@ type
     suggestionInd*: int = -1
     suggestion*: string
 
-  Screen = object
-    x*, y*: int
-    buffer*: Buffer
-    activeProgram: InsensitiveString
-    input: TextInput
-    programX: int
-    programY: int
-    shipStack: seq[string] ## Stack of names for which ship is presently controlled
-      ## [^1] is active
-      ## [0] is the player's
+  ScreenKind = enum
+    NoSplit
+    SplitH
+    SplitV
+
+  ScreenAction = enum
+    Nothing
+    Close
+    SplitH
+    SplitV
+
+  Screen = ref object
+    x*, y*, w*, h*: float32
+    parent: Screen
+    case kind: ScreenKind
+    of NoSplit:
+      buffer*: Buffer
+      activeProgram: InsensitiveString
+      input: TextInput
+      programX: int
+      programY: int
+      shipStack: seq[string] ## Stack of names for which ship is presently controlled
+        ## [^1] is active
+        ## [0] is the player's
+      action: ScreenAction
+    of SplitH, SplitV:
+      left*: Screen
+      right*: Screen
+
+  ScreenObj = typeof(Screen()[])
 
   GameState* = object
-    screens: seq[Screen]
-    currentScreen*: int
+    rootScreen: Screen
+    screen*: Screen
+    screenCount: int
 
     programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
     handlers: Table[InsensitiveString, Command]
@@ -77,19 +98,16 @@ iterator commands*(gameState: GameState): Command =
   for command in gamestate.handlers.values:
     yield command
 
-iterator mscreens*(gameState: var GameState): var Screen =
-  for screen in gameState.screens.mitems:
-    yield screen
-
-iterator screenPairs*(gameState: var GameState): (int, var Screen) =
-  for i in 0..gameState.screens.high:
-    yield (i, gameState.screens[i])
-
-proc screen(gameState: var GameState): var Screen =
-  gameState.screens[gameState.currentScreen]
-
-proc screen(gameState: GameState): lent Screen =
-  gameState.screens[gameState.currentScreen]
+iterator screens*(gameState: var GameState): Screen =
+  var queue = @[gameState.rootScreen]
+  while queue.len > 0:
+    let screen = queue.pop()
+    case screen.kind
+    of NoSplit:
+      if screen.w != 0 and screen.h != 0:
+        yield screen
+    else:
+      queue.add [screen.left, screen.right]
 
 proc input(gameState: GameState): lent TextInput = gameState.screen.input
 proc input(gameState: var GameState): var TextInput = gameState.screen.input
@@ -193,6 +211,119 @@ proc insert(s: var string, at: int, toInsert: string) =
 proc add*(gameState: var GameState, command: Command) =
   gameState.handlers[InsensitiveString(command.name)] = command
 
+proc splitVertical(gameState: var GameState, screen: Screen) =
+  screen.action = Nothing
+  screen.buffer.setLineWidth screen.buffer.lineWidth div 2
+  var buff = Buffer(
+    lineWidth: screen.buffer.lineWidth,
+    lineHeight: screen.buffer.lineHeight
+  )
+  buff.initFrom(gamestate.screen.buffer)
+  #buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+  buff.put("")
+
+  var oldScreen = move screen[]
+  let origWidth = oldScreen.w
+  oldScreen.w = oldScreen.w / 2
+  let newScreen = Screen(
+      kind: NoSplit,
+      x: oldScreen.x + oldScreen.w,
+      y: oldScreen.y,
+      w: oldScreen.w,
+      h: oldScreen.h,
+      buffer: buff,
+      shipStack: oldScreen.shipStack,
+    )
+  screen[] = ScreenObj(
+    kind: SplitV,
+    x: oldScreen.x,
+    y: oldScreen.y,
+    w: origWidth,
+    h: oldScreen.h,
+    left: Screen(),
+    right: newScreen,
+    parent: oldScreen.parent
+  )
+  screen.left[] = oldScreen
+  screen.left.parent = screen
+  screen.right.parent = screen
+  gameState.screen = screen.left
+  inc gameState.screenCount
+
+proc splitHorizontal(gameState: var GameState, screen: Screen) =
+  screen.action = Nothing
+  screen.buffer.setLineHeight screen.buffer.lineHeight div 2
+  var buff = Buffer(
+    lineWidth: screen.buffer.lineWidth,
+    lineHeight: screen.buffer.lineHeight,
+    properties: GlyphProperties(foreground: parseHtmlColor("White"))
+  )
+  buff.initFrom(gamestate.screen.buffer)
+  #buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+  buff.put("")
+  var oldScreen = move screen[]
+  let origHeight = oldScreen.h
+  oldScreen.h = oldScreen.h / 2
+  let newScreen = Screen(
+      kind: NoSplit,
+      x: oldScreen.x,
+      y: oldScreen.y + oldScreen.h,
+      w: oldScreen.w,
+      h: oldScreen.h,
+      buffer: buff,
+      shipStack: oldScreen.shipStack,
+    )
+  screen[] = ScreenObj(
+    kind: SplitH,
+    x: oldScreen.x,
+    y: oldScreen.y,
+    w: oldScreen.w,
+    h: origHeight,
+    left: Screen(),
+    right: newScreen,
+    parent: oldScreen.parent
+  )
+  screen.left[] = oldScreen
+  screen.left.parent = screen
+  screen.right.parent = screen
+  gameState.screen = screen.left
+  inc gameState.screenCount
+
+proc closeScreen(gameState: var Gamestate, screen: Screen) =
+  screen.action = Nothing
+  let
+    theParent = screen.parent
+    theSplit = move screen.parent[]
+
+  assert theSplit.kind != NoSplit
+
+  theParent[] =
+    if screen == theSplit.left:
+      move theSplit.right[]
+    elif screen == theSplit.right:
+      move theSplit.left[]
+    else:
+      raiseAssert "Unreachable screen has to be left or right of it's parent"
+
+  theParent.x = theSplit.x
+  theParent.y = theSplit.y
+  theParent.w = theSplit.w
+  theParent.h = theSplit.h
+
+  gameState.screen = theParent
+
+  theParent.parent = theSplit.parent
+
+  if theParent.parent == nil:
+    gameState.rootScreen = theParent
+  else:
+    assert theSplit.parent.kind != NoSplit
+
+  theParent.buffer.setLineWidth int(theParent.w)
+  theParent.buffer.setLineHeight int(theParent.h)
+  dec gameState.screenCount
+
+
 proc init*(_: typedesc[GameState]): GameState =
   #[
   result.add Command(
@@ -292,40 +423,33 @@ proc init*(_: typedesc[GameState]): GameState =
     name: "splitv",
     help: "Splits the current terminal vertically. The left side maintains history",
     handler: proc(gameState: var GameState, _: string) =
-      gameState.buffer.setLineWidth gameState.buffer.lineWidth div 2
-      var buff = Buffer(
-        lineWidth: gameState.buffer.lineWidth,
-        lineHeight: gameState.buffer.lineHeight
-      )
-      #buff.initFrom(gamestate.screen.buffer)
-      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-      buff.put("")
-      gameState.screens.add Screen(
-        x: gameState.screen.x + gameState.buffer.lineWidth,
-        y: gameState.screen.y,
-        buffer: buff,
-        shipStack: gamestate.screen.shipStack,
-      )
+      if gameState.buffer.lineWidth div 2 < 10:
+        gameState.writeError("Cannot make the buffer, width would be too small\n")
+        return
+      gameState.screen.action = SplitV
+
   )
   result.add Command(
     name: "splith",
     help: "Splits the current terminal horizontally. The top side maintains history",
     handler: proc(gameState: var GameState, _: string) =
-      gameState.buffer.setLineHeight gameState.buffer.lineHeight div 2
-      var buff = Buffer(
-        lineWidth: gameState.buffer.lineWidth,
-        lineHeight: gameState.buffer.lineHeight,
-        properties: GlyphProperties(foreground: parseHtmlColor("White"))
-      )
-      #buff.initFrom(gamestate.screen.buffer)
-      buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-      buff.put("")
-      gameState.screens.add Screen(
-        x: gameState.screen.x,
-        y: gameState.screen.y + gameState.buffer.lineHeight,
-        buffer: buff,
-        shipStack: gamestate.screen.shipStack,
-      )
+      if gameState.buffer.lineHeight div 2 < 10:
+        gameState.writeError("Cannot make the buffer, height would be too small")
+        return
+      gameState.screen.action = SplitH
+  )
+
+
+  result.add Command(
+    name: "close",
+    help: "Closes the active window if it is not the last opened window.",
+    handler: proc(gameState: var GameState, _: string) =
+      assert gameState.screen.kind == NoSplit
+      if gameState.screen != gameState.rootScreen:
+        gameState.screen.action = Close
+      else:
+        gameState.buffer.put("To quit the game run 'quit really'.\n")
+
   )
 
   for command in programutils.commands():
@@ -336,7 +460,9 @@ proc init*(_: typedesc[GameState]): GameState =
 
   var buff = Buffer(lineWidth: result.screenWidth, lineHeight: result.screenHeight, properties: GlyphProperties(foreground: parseHtmlColor("White")))
   buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-  result.screens.add Screen(buffer: buff)
+  result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
+  result.screen = result.rootScreen
+  inc result.screenCount
 
 
 proc clearSuggestion(gameState: var GameState) =
@@ -405,11 +531,13 @@ proc update*(gameState: var GameState, dt: float) =
   var dirtiedInput = false
   proc dirtyInput() = dirtiedInput = true
 
-
   if KeyCodeLAlt.isDownRepeating():
-    gameState.currentScreen = (gameState.currentScreen + 1) mod gameState.screens.len
-    dirtyInput()
-
+    if gameState.screen.kind == NoSplit and gameState.screen.parent != nil:
+      if gameState.screen.parent.left == gameState.screen:
+        gameState.screen = gameState.screen.parent.right
+      else:
+        gameState.screen = gameState.screen.parent.left
+      dirtyInput()
 
   if inputText().len > 0:
     gameState.input.str.insert gameState.input.pos, inputText()
@@ -480,19 +608,19 @@ proc update*(gameState: var GameState, dt: float) =
           program.update(gamestate, dt, false)
 
 
-    for screenInd, screen in gamestate.screenPairs:
+    for screen in gamestate.screens:
       let
-        isActiveScreen = gameState.currentScreen == screenInd
-        oldScreen = gameState.currentScreen
-      gameState.currentScreen = screenInd
-      if not screen.inProgram or Blocking in gameState.currentProgramFlags(screen):
+        isActiveScreen = gameState.screen == screen
+        oldScreen = gameState.screen
+      gameState.screen = screen
+      if not screen.inProgram or Blocking in gameState.currentProgramFlags(gameState.screen):
         if KeyCodePageUp.isDownRepeating() and isActiveScreen: # Scrollup
           gameState.buffer.scrollUp()
 
         if KeyCodePageDown.isDownRepeating() and isActiveScreen: # Scroll Down
           gameState.buffer.scrollDown()
 
-        if Blocking notin gameState.currentProgramFlags(screen):
+        if Blocking notin gameState.currentProgramFlags(gameState.screen):
           if KeyCodeReturn.isDownRepeating() and isActiveScreen: # Enter
             if gameState.input.suggestion.len > 0:
               gameState.takeSuggestion()
@@ -522,7 +650,7 @@ proc update*(gameState: var GameState, dt: float) =
 
           gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
 
-          if not screen.inProgram and dirtiedInput:
+          if not gameState.screen.inProgram and dirtiedInput:
             gameState.buffer.clearLine()
             gameState.buffer.put(">")
             if gameState.input.suggestion.len > 0:
@@ -544,9 +672,19 @@ proc update*(gameState: var GameState, dt: float) =
           gameState.buffer.put ">"
           gamestate.buffer.showCursor(0)
 
-      screen.buffer.upload(dt)
-      gameState.currentScreen = oldScreen
-
+      gameState.screen = oldScreen
+      case screen.action
+      of SplitV:
+        gameState.splitVertical(screen)
+      of SplitH:
+        gameState.splitHorizontal(screen)
+      of Close:
+        gameState.closeScreen(screen)
+      of Nothing:
+        discard
+      if screen.kind == NoSplit:
+        screen.action = Nothing
+        screen.buffer.upload(dt)
 
   if gameState.screen.shipStack.len > 0 and startShipCount == gameState.screen.shipStack.len:
     gameState.activeShipEntity.shipData.glyphProperties = gameState.buffer.properties
