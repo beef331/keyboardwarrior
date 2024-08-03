@@ -290,13 +290,73 @@ proc splitHorizontal(gameState: var GameState, screen: Screen) =
   gameState.screen = screen.left
   inc gameState.screenCount
 
+proc recalculate(screen: Screen) =
+  var screens = @[screen]
+  while screens.len > 0:
+    let screen = screens.pop()
+    case screen.kind
+    of SplitV:
+      screen.left.x = screen.x
+      screen.right.x = screen.x + screen.w / 2
+      screen.left.y = screen.y
+      screen.right.y = screen.y
+
+      screen.left.h = screen.h
+      screen.right.h = screen.h
+
+      screen.left.w = screen.w / 2
+      screen.right.w = screen.w / 2
+
+      if screen.left.kind == NoSplit:
+        screen.left.buffer.setLineWidth(int screen.left.w)
+        screen.left.buffer.setLineHeight(int screen.left.h)
+        screen.left.buffer.recalculateBuffer()
+      else:
+        screens.add screen.left
+
+
+      if screen.right.kind == NoSplit:
+        screen.right.buffer.setLineWidth(int screen.right.w)
+        screen.right.buffer.setLineHeight(int screen.right.h)
+        screen.right.buffer.recalculateBuffer()
+      else:
+        screens.add screen.right
+    of SplitH:
+      screen.left.x = screen.x
+      screen.right.x = screen.x
+      screen.left.y = screen.y
+      screen.right.y = screen.y + screen.h / 2
+
+      screen.left.h = screen.h / 2
+      screen.right.h = screen.h / 2
+
+      screen.left.w = screen.w
+      screen.right.w = screen.w
+
+      if screen.left.kind == NoSplit:
+        screen.left.buffer.setLineWidth(int screen.left.w)
+        screen.left.buffer.setLineHeight(int screen.left.h)
+        screen.left.buffer.recalculateBuffer()
+      else:
+        screens.add screen.left
+
+
+      if screen.right.kind == NoSplit:
+        screen.right.buffer.setLineWidth(int screen.right.w)
+        screen.right.buffer.setLineHeight(int screen.right.h)
+        screen.right.buffer.recalculateBuffer()
+      else:
+        screens.add screen.right
+    else:
+      discard
+
+
+
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
   screen.action = Nothing
   let
     theParent = screen.parent
     theSplit = move screen.parent[]
-
-  assert theSplit.kind != NoSplit
 
   theParent[] =
     if screen == theSplit.left:
@@ -317,11 +377,15 @@ proc closeScreen(gameState: var Gamestate, screen: Screen) =
 
   if theParent.parent == nil:
     gameState.rootScreen = theParent
-  else:
-    assert theSplit.parent.kind != NoSplit
 
-  theParent.buffer.setLineWidth int(theParent.w)
-  theParent.buffer.setLineHeight int(theParent.h)
+  if theParent.kind == NoSplit:
+    theParent.buffer.setLineWidth int(theParent.w)
+    theParent.buffer.setLineHeight int(theParent.h)
+  else:
+    gameState.screen = theParent.left
+
+  theParent.recalculate()
+
   dec gameState.screenCount
 
 type FocusDirection = enum Up, Right, Down, Left
