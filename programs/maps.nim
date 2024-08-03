@@ -14,8 +14,8 @@ proc name(sensor: Map): string = "Map"
 proc onExit(sensor: var Map, gameState: var GameState) = gameState.buffer.mode = Text
 proc getFlags(_: Map): ProgramFlags = {}
 
-proc update(sensor: var Map, gameState: var GameState, dt: float32, active: bool) =
-  if active:
+proc update(sensor: var Map, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+  if Draw in flags:
     gameState.buffer.clearShapes()
     gamestate.buffer.mode = Graphics
     let player = gameState.activeShipEntity

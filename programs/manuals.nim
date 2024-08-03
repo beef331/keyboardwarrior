@@ -5,7 +5,7 @@ type ManPage = object
 
 proc name(_: ManPage): string = "manual"
 proc onExit(_: var ManPage, gameState: var GameState) = discard
-proc update(_: var ManPage, gameState: var GameState, dt: float32, active: bool) = discard
+proc update(_: var ManPage, gameState: var GameState, dt: float32, _: ProgramFlags) = discard
 proc getFlags(_: ManPage): ProgramFlags = {Blocking}
 
 

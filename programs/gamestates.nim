@@ -9,12 +9,14 @@ export screenrenderer, chroma, pixie
 type
   ProgramFlag* = enum
     Blocking ## For things like manpage, no need to clear just do not print `> ...` next
+    Draw ## Passed to tell the program it's drawing
+    TakeInput ## Passed to tell the program it's currently the interacted screen
 
   ProgramFlags* = set[ProgramFlag]
 
   Program* = distinct tuple[
     onExit: proc(_: var Atom, gameState: var GameState) {.nimcall.},
-    update: proc(_: var Atom, gameState: var GameState, dt: float32, active: bool) {.nimcall.},
+    update: proc(_: var Atom, gameState: var GameState, dt: float32, active: ProgramFlags) {.nimcall.},
     name: proc(_: Atom): string {.nimcall.},
     getFlags: proc(_: Atom): set[ProgramFlag] {.nimcall.}
   ]
@@ -323,6 +325,61 @@ proc closeScreen(gameState: var Gamestate, screen: Screen) =
   theParent.buffer.setLineHeight int(theParent.h)
   dec gameState.screenCount
 
+type FocusDirection = enum Up, Right, Down, Left
+
+proc focus(gameState: var Gamestate, dir: FocusDirection) =
+  var
+    distX = float32.high
+    distY = float32.high
+    toSelect = gameState.screen
+  let currentScreen = toSelect
+
+  case dir
+  of Up:
+    for screen in gameState.screens:
+      if screen != currentScreen:
+        let
+          scrDistX = abs(screen.x - currentScreen.x)
+          scrDistY = abs(screen.y - currentScreen.y)
+        if screen.y < currentScreen.y and scrDistX <= distX and scrDistY <= distY:
+          toSelect = screen
+          distX = scrDistx
+          distY = scrDistY
+
+
+  of Right:
+    for screen in gameState.screens:
+      if screen != currentScreen:
+        let
+          scrDistX = abs(screen.x - currentScreen.x)
+          scrDistY = abs(screen.y - currentScreen.y)
+        if screen.x > currentScreen.x and scrDistX <= distX and scrDistY <= distY:
+          toSelect = screen
+          distX = scrDistx
+          distY = scrDistY
+
+  of Down:
+    for screen in gameState.screens:
+      if screen != currentScreen:
+        let
+          scrDistX = abs(screen.x - currentScreen.x)
+          scrDistY = abs(screen.y - currentScreen.y)
+        if screen.y > currentScreen.y and scrDistX <= distX and scrDistY <= distY:
+          toSelect = screen
+          distX = scrDistx
+          distY = scrDistY
+  of Left:
+    for screen in gameState.screens:
+      if screen != currentScreen:
+        let
+          scrDistX = abs(screen.x - currentScreen.x)
+          scrDistY = abs(screen.y - currentScreen.y)
+        if screen.x < currentScreen.x and scrDistX <= distX and scrDistY <= distY:
+          toSelect = screen
+          distX = scrDistx
+          distY = scrDistY
+
+  gameState.screen = toSelect
 
 proc init*(_: typedesc[GameState]): GameState =
   #[
@@ -531,12 +588,18 @@ proc update*(gameState: var GameState, dt: float) =
   var dirtiedInput = false
   proc dirtyInput() = dirtiedInput = true
 
-  if KeyCodeLAlt.isDownRepeating():
-    if gameState.screen.kind == NoSplit and gameState.screen.parent != nil:
-      if gameState.screen.parent.left == gameState.screen:
-        gameState.screen = gameState.screen.parent.right
-      else:
-        gameState.screen = gameState.screen.parent.left
+  if KeycodeLAlt.isPressed():
+    if KeycodeUp.isDownRepeating():
+      gameState.focus(Up)
+      dirtyInput()
+    if KeycodeRight.isDownRepeating():
+      gameState.focus(Right)
+      dirtyInput()
+    if KeycodeDown.isDownRepeating():
+      gameState.focus(Down)
+      dirtyInput()
+    if KeycodeLeft.isDownRepeating():
+      gameState.focus(Left)
       dirtyInput()
 
   if inputText().len > 0:
@@ -559,12 +622,12 @@ proc update*(gameState: var GameState, dt: float) =
     dirtyInput()
 
 
-  if KeycodeLeft.isDownRepeating:
+  if KeycodeLeft.isDownRepeating and not KeycodeLAlt.isPressed():
     gameState.input.pos = max(gameState.input.pos - 1, 0)
     dirtyInput()
 
 
-  if KeycodeRight.isDownRepeating:
+  if KeycodeRight.isDownRepeating and not KeycodeLAlt.isPressed():
     if gameState.input.suggestionInd != -1:
       gameState.takeSuggestion()
     else:
@@ -605,7 +668,7 @@ proc update*(gameState: var GameState, dt: float) =
             found = true
             break
         if not found:
-          program.update(gamestate, dt, false)
+          program.update(gamestate, dt, {})
 
 
     for screen in gamestate.screens:
@@ -628,7 +691,7 @@ proc update*(gameState: var GameState, dt: float) =
               gameState.dispatchCommand()
             dirtyInput()
 
-          if KeyCodeUp.isDownRepeating() and isActiveScreen: # Up History
+          if KeyCodeUp.isDownRepeating() and isActiveScreen and not KeycodeLAlt.isPressed(): # Up History
             inc gameState.historyPos
             if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
               gameState.input.str = gameState.history[^gameState.historyPos]
@@ -638,7 +701,7 @@ proc update*(gameState: var GameState, dt: float) =
               gameState.input.pos = gameState.input.str.len
             dirtyInput()
 
-          if KeyCodeDown.isDownRepeating() and isActiveScreen: # Down History
+          if KeyCodeDown.isDownRepeating() and isActiveScreen and not KeycodeLAlt.isPressed(): # Down History
             dec gamestate.historyPos
             if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
               gameState.input.str = gameState.history[^gameState.historyPos]
@@ -663,8 +726,12 @@ proc update*(gameState: var GameState, dt: float) =
         if gameState.buffer.mode == Text:
           gameState.buffer.clearTo(screen.programY)
           gameState.buffer.cameraPos = screen.programY
-
-        gameState.activeProgramTrait(screen).update(gamestate, dt, true)
+        let flag =
+          if screen == oldScreen:
+            {Draw, TakeInput}
+          else:
+            {Draw}
+        gameState.activeProgramTrait(screen).update(gamestate, dt, flag)
 
       if screen.inProgram and isActiveScreen:
         if KeyCodeEscape.isDown:

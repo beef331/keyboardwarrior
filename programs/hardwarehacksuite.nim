@@ -87,10 +87,10 @@ proc put*(buffer: var Buffer, gameState: var GameState, hwHack: HardwareHack) =
 
   buffer.newLine()
 
-proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, active: bool) =
-  if active and not hwHack.isHacking:
+proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+  if Draw in flags and not hwHack.isHacking:
 
-    if KeyCodeReturn.isDownRepeating:
+    if KeyCodeReturn.isDownRepeating() and TakeInput in flags:
       hwHack.errorMsg = ""
       try:
         let guess = parseInt(gameState.popInput())
@@ -121,7 +121,7 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
       hwHack.currentGuess.guessed = true
       hwHack.currentGuess.timeToDeny = int(hwHack.timeToHack)
 
-  if active:
+  if Draw in flags:
     if hwHack.isHacking:
       discard gameState.popInput()
     for guess in hwHack.guesses:

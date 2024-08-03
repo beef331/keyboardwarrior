@@ -40,40 +40,40 @@ proc name(shop: Shop): string = "Shop"
 proc onExit(shop: var Shop, gameState: var GameState) = discard
 proc getFlags(_: Shop): ProgramFlags = {}
 
-proc update(shop: var Shop, gameState: var GameState, dt: float32, active: bool) =
-  if active:
+proc update(shop: var Shop, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+  if Draw in flags:
+    if TakeInput in flags:
+      case shop.state
+      of BrowsingShop:
+        if KeyCodeUp.isDownRepeating():
+          shop.position = max(shop.position - 1, 0)
 
-    case shop.state
-    of BrowsingShop:
-      if KeyCodeUp.isDownRepeating():
-        shop.position = max(shop.position - 1, 0)
+        if KeyCodeDown.isDownRepeating():
+          shop.position = min(shop.position + 1, shopData.high)
 
-      if KeyCodeDown.isDownRepeating():
-        shop.position = min(shop.position + 1, shopData.high)
+        if KeyCodeReturn.isDownRepeating():
+          shop.state = Purchasing
+          shop.amount = 1
 
-      if KeyCodeReturn.isDownRepeating():
-        shop.state = Purchasing
-        shop.amount = 1
+      of Purchasing:
+        if KeyCodeUp.isDownRepeating():
+          shop.amount = min(shop.amount + 1, shopData[shop.position].count)
 
-    of Purchasing:
-      if KeyCodeUp.isDownRepeating():
-        shop.amount = min(shop.amount + 1, shopData[shop.position].count)
+        if KeyCodeDown.isDownRepeating():
+          shop.amount = max(shop.amount - 1, 1)
 
-      if KeyCodeDown.isDownRepeating():
-        shop.amount = max(shop.amount - 1, 1)
-
-      if KeyCodeReturn.isDown():
-        shopData[shop.position].count -= shop.amount
-        if shopData[shop.position].count == 0:
-          shopData.delete(shop.position)
-        shop.position = clamp(shop.position, 0, shopData.high)
-        shop.state = BrowsingShop
+        if KeyCodeReturn.isDown():
+          shopData[shop.position].count -= shop.amount
+          if shopData[shop.position].count == 0:
+            shopData.delete(shop.position)
+          shop.position = clamp(shop.position, 0, shopData.high)
+          shop.state = BrowsingShop
 
 
-    of BrowsingInventory:
-      assert false, "Unimplemented"
-    of Selling:
-      assert false, "Unimplemented"
+      of BrowsingInventory:
+        assert false, "Unimplemented"
+      of Selling:
+        assert false, "Unimplemented"
 
 
     let

@@ -135,6 +135,7 @@ type
     graphicCursorX: int = -1
     graphicCursorY: int = -1
 
+proc `$`(b: Buffer): string = "..."
 
 proc pixelHeight*(buff: Buffer): int = buff.pixelHeight
 proc pixelWidth*(buff: Buffer): int = buff.pixelWidth
@@ -532,12 +533,12 @@ proc clearTo*(buff: var Buffer, x, y: int) =
   buff.lines.setLen(y + 1)
   buff.cursorX = x
 
-proc newLine*(buff: var Buffer) =
+proc newLine*(buff: var Buffer, moveCamera = true) =
   assert buff.mode == Text
   buff.lines.add Line()
   inc buff.cursorY
   buff.cursorX = 0
-  if buff.cursorY - buff.cameraPos >= buff.lineHeight:
+  if moveCamera and buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
 iterator chr*(s: string): Rune =
@@ -552,7 +553,10 @@ proc isNewLine(rune: Rune): bool = rune == Rune '\n'
 proc isNewLine(glyph: Glyph): bool = glyph.rune.isNewLine()
 
 
-proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false): auto =
+proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, wrapped = false, getBuffer: static bool = false): auto =
+  ## `moveCamera` indicates whether the camera should move when messages go off screenSize
+  ## `wrapped` means that instead of writting in deadspace a newline will be inserted
+  ## `getBuffer` indicates whether to return the data written over
   assert buff.mode == Text
   when getBuffer:
     result = newSeq[Glyph]()
@@ -567,31 +571,31 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
       result.add buff.lines[buff.cursorY].glyphs[buff.cursorX]
 
     if rune.isNewLine():
-      buff.lines.add Line()
-      buff.cursorX = 0
-      inc buff.cursorY
-    elif buff.cursorX < buff.lineWidth:
+      buff.newLine(moveCamera)
+    else:
+      if wrapped and buff.cursorX + 1 > buff.lineWidth:
+        buff.newLine()
 
+      if buff.cursorX < buff.lineWidth:
+        buff.lines[buff.cursorY].glyphs[buff.cursorX] =
+          when rune is Rune:
+            Glyph(rune: rune, properties: propInd)
+          else:
+            rune
 
-      buff.lines[buff.cursorY].glyphs[buff.cursorX] =
-        when rune is Rune:
-          Glyph(rune: rune, properties: propInd)
-        else:
-          rune
-
-      inc buff.cursorX
+        inc buff.cursorX
 
   if moveCamera and buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
-proc put*(buff: var Buffer, s: string, moveCamera = true) =
-  put buff, s, buff.properties, moveCamera
+proc put*(buff: var Buffer, s: string, moveCamera = true, wrapped = false) =
+  put buff, s, buff.properties, moveCamera, wrapped
 
-proc put*(buff: var Buffer, s: seq[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false) = # `seq[Glyph]` != openArray
-  buff.put(s.toOpenArray(0, s.high), props, moveCamera, getBuffer)
+proc put*(buff: var Buffer, s: seq[Glyph], props: GlyphProperties, moveCamera = true, wrapped = false, getBuffer: static bool = false) = # `seq[Glyph]` != openArray
+  buff.put(s.toOpenArray(0, s.high), props, moveCamera, wrapped, getBuffer)
 
-proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true) =
-  put buff, s, buff.properties, moveCamera
+proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true, wrapped = false) =
+  put buff, s, buff.properties, moveCamera, wrapped
 
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: GlyphProperties) =
   assert buff.mode == Graphics
