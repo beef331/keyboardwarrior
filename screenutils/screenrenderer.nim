@@ -212,6 +212,7 @@ proc initFrom*(buff: var Buffer, source: Buffer, seedNoise = true) =
 
   buff.lineWidth = source.lineWidth
   buff.lineHeight = source.lineHeight
+  buff.properties = source.properties
   buff.noise =
     if seedNoise:
       newOpenSimplex()
@@ -219,7 +220,6 @@ proc initFrom*(buff: var Buffer, source: Buffer, seedNoise = true) =
       newOpenSimplex(0)
   buff.useFrameBuffer = source.useFrameBuffer
   buff.recalculateBuffer()
-  discard buff.getPropertyIndex(buff.properties)
 
 
 proc setFontSize*(buff: var Buffer, size: int) =

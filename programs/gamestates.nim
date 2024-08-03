@@ -221,8 +221,8 @@ proc splitVertical(gameState: var GameState, screen: Screen) =
     lineHeight: screen.buffer.lineHeight
   )
   buff.initFrom(gamestate.screen.buffer)
-  #buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-  buff.put("")
+  buff.put(">")
+  buff.showCursor(0)
 
   var oldScreen = move screen[]
   let origWidth = oldScreen.w
@@ -258,11 +258,10 @@ proc splitHorizontal(gameState: var GameState, screen: Screen) =
   var buff = Buffer(
     lineWidth: screen.buffer.lineWidth,
     lineHeight: screen.buffer.lineHeight,
-    properties: GlyphProperties(foreground: parseHtmlColor("White"))
   )
   buff.initFrom(gamestate.screen.buffer)
-  #buff.initResources("PublicPixel.ttf", true, fontSize = 80)
-  buff.put("")
+  buff.put(">")
+  buff.showCursor(0)
   var oldScreen = move screen[]
   let origHeight = oldScreen.h
   oldScreen.h = oldScreen.h / 2
@@ -676,6 +675,7 @@ proc update*(gameState: var GameState, dt: float) =
         isActiveScreen = gameState.screen == screen
         oldScreen = gameState.screen
       gameState.screen = screen
+
       if not screen.inProgram or Blocking in gameState.currentProgramFlags(gameState.screen):
         if KeyCodePageUp.isDownRepeating() and isActiveScreen: # Scrollup
           gameState.buffer.scrollUp()
