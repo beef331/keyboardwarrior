@@ -72,17 +72,17 @@ when not defined(testing):
 else:
   import screenutils/pam
   import pkg/pixie/fileformats/png
+  import pkg/opengl
 
 
   var errorCode: int
   template genTest(name: string, dt: float32, body: untyped) =
+    glClear(GlColorBufferBit)
     body
-    gameState.buffer.upload(dt)
-    gameState.buffer.render()
+    draw()
+    var img = newImage(screenSize().x, screenSize().y)
 
-    var img = newImage(gameState.buffer.pixelWidth, gameState.buffer.pixelHeight)
-
-    glGetTextureImage(gameState.buffer.getFrameBufferTexture().Gluint, 0, GlRgba,  GlUnsignedByte, img.data.len * 4, img.data[0].addr)
+    glReadPixels(0, 0, img.width, img.height, GlRgba,  GlUnsignedByte, img.data[0].addr)
     img.flipVertical()
     let
       path = "tests" / "testimages" / name.changeFileExt("png")
@@ -134,6 +134,52 @@ else:
       gameState.update(0.1)
       gameState.update(0.1)
       inputs.inputs.simulateClear(KeycodePageDown)
+
+    genTest("console/splitv", 0):
+      inputs.inputs.inputText() = "splitv"
+      gameState.update(0.1)
+      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeReturn)
+
+    genTest("console/splith", 0):
+      inputs.inputs.inputText() = "splith"
+      gameState.update(0.1)
+      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeReturn)
+
+    genTest("console/navigateright", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeRight)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeRight)
+      gameState.update(0.1)
+
+    genTest("console/navigateleft", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeLeft)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeLeft)
+      gameState.update(0.1)
+
+    genTest("console/navigatedown", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeDown)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeDown)
+      gameState.update(0.1)
+
+    genTest("console/navigateup", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeUp)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeUp)
+      gameState.update(0.1)
 
     quit errorCode
 
