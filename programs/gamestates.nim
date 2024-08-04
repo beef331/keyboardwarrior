@@ -307,20 +307,10 @@ proc recalculate(screen: Screen) =
       screen.left.w = screen.w / 2
       screen.right.w = screen.w / 2
 
-      if screen.left.kind == NoSplit:
-        screen.left.buffer.setLineWidth(int screen.left.w)
-        screen.left.buffer.setLineHeight(int screen.left.h)
-        screen.left.buffer.recalculateBuffer()
-      else:
-        screens.add screen.left
 
+      screens.add screen.left
+      screens.add screen.right
 
-      if screen.right.kind == NoSplit:
-        screen.right.buffer.setLineWidth(int screen.right.w)
-        screen.right.buffer.setLineHeight(int screen.right.h)
-        screen.right.buffer.recalculateBuffer()
-      else:
-        screens.add screen.right
     of SplitH:
       screen.left.x = screen.x
       screen.right.x = screen.x
@@ -333,30 +323,20 @@ proc recalculate(screen: Screen) =
       screen.left.w = screen.w
       screen.right.w = screen.w
 
-      if screen.left.kind == NoSplit:
-        screen.left.buffer.setLineWidth(int screen.left.w)
-        screen.left.buffer.setLineHeight(int screen.left.h)
-        screen.left.buffer.recalculateBuffer()
-      else:
-        screens.add screen.left
 
+      screens.add screen.left
+      screens.add screen.right
 
-      if screen.right.kind == NoSplit:
-        screen.right.buffer.setLineWidth(int screen.right.w)
-        screen.right.buffer.setLineHeight(int screen.right.h)
-        screen.right.buffer.recalculateBuffer()
-      else:
-        screens.add screen.right
-    else:
-      discard
-
-
+    of NoSplit:
+      screen.buffer.setLineWidth(int screen.w)
+      screen.buffer.setLineHeight(int screen.h)
 
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
   screen.action = Nothing
   let
     theParent = screen.parent
     theSplit = move screen.parent[]
+
 
   theParent[] =
     if screen == theSplit.left:
@@ -365,6 +345,10 @@ proc closeScreen(gameState: var Gamestate, screen: Screen) =
       move theSplit.left[]
     else:
       raiseAssert "Unreachable screen has to be left or right of it's parent"
+
+  if theParent.kind != NoSplit:
+    theParent.left.parent = theParent
+    theParent.right.parent = theParent
 
   theParent.x = theSplit.x
   theParent.y = theSplit.y
@@ -375,13 +359,7 @@ proc closeScreen(gameState: var Gamestate, screen: Screen) =
 
   theParent.parent = theSplit.parent
 
-  if theParent.parent == nil:
-    gameState.rootScreen = theParent
-
-  if theParent.kind == NoSplit:
-    theParent.buffer.setLineWidth int(theParent.w)
-    theParent.buffer.setLineHeight int(theParent.h)
-  else:
+  if theParent.kind != NoSplit:
     gameState.screen = theParent.left
 
   theParent.recalculate()
