@@ -6,7 +6,6 @@ import pkg/truss3D/[inputs, logging]
 
 var
   gameState: GameState
-  coverTex: Texture
   screenShader: Shader
   rectModel: Model
   time: float32
@@ -14,7 +13,6 @@ var
 
 proc init =
   gameState = GameState.init()
-  coverTex = genTexture()
 
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
@@ -23,9 +21,40 @@ proc init =
 
   rectModel = uploadData(modelData)
 
-  readImage("console.png").copyTo coverTex
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
+
+
+proc draw() =
+  for screen in gameState.screens:
+
+    screen.buffer.render()
+
+    let
+      scrSize = screenSize().vec2
+      scale = min(scrSize.x / gameState.screenWidth.float32, scrSize.y / gameState.screenHeight.float32)
+      sizeX = (scale * screen.w)
+      sizeY = (scale * screen.h)
+      size = vec2(sizeX, sizeY) / scrSize * 2 # times 2 cause the rect is only 0..1 but Opengl is -1..1
+      offset = abs(vec2(scale * gameState.screenWidth.float32, scale * gameState.screenHeight.float32) - scrSize) / scrSize
+
+    var pos = vec3(screen.x * scale, screen.y * scale, 1) / vec3(scrSize, 1)
+    pos.y *= -1
+    pos.xy = pos.xy * 2f + vec2(-1f + offset.x, 1f - size.y - offset.y)
+
+    let mat = translate(pos) * scale(vec3(size, 0))
+
+    if screenShader.Gluint > 0:
+      with screenShader:
+        screenShader.setUniform("tex", screen.buffer.getFrameBufferTexture(), required = false)
+        screenShader.setUniform("mvp", mat, required = false)
+        screenShader.setUniform("fontHeight", screen.buffer.fontSize, required = false)
+        screenShader.setUniform("time", time, required = false)
+        screenShader.setUniform("screenSize", scrSize, required = false)
+        #screenShader.setUniform("curve", gameState.curveAmount)
+        screenShader.setUniform("activeScreen", float32(screen == gameState.screen))
+        render(rectModel)
+
 
 
 when not defined(testing):
@@ -40,17 +69,17 @@ when not defined(testing):
 else:
   import screenutils/pam
   import pkg/pixie/fileformats/png
+  import pkg/opengl
 
 
   var errorCode: int
   template genTest(name: string, dt: float32, body: untyped) =
+    glClear(GlColorBufferBit)
     body
-    gameState.buffer.upload(dt)
-    gameState.buffer.render()
+    draw()
+    var img = newImage(screenSize().x, screenSize().y)
 
-    var img = newImage(gameState.buffer.pixelWidth, gameState.buffer.pixelHeight)
-
-    glGetTextureImage(gameState.buffer.getFrameBufferTexture().Gluint, 0, GlRgba,  GlUnsignedByte, img.data.len * 4, img.data[0].addr)
+    glReadPixels(0, 0, img.width, img.height, GlRgba,  GlUnsignedByte, img.data[0].addr)
     img.flipVertical()
     let
       path = "tests" / "testimages" / name.changeFileExt("png")
@@ -103,34 +132,53 @@ else:
       gameState.update(0.1)
       inputs.inputs.simulateClear(KeycodePageDown)
 
+    genTest("console/splitv", 0):
+      inputs.inputs.inputText() = "splitv"
+      gameState.update(0.1)
+      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeReturn)
+
+    genTest("console/splith", 0):
+      inputs.inputs.inputText() = "splith"
+      gameState.update(0.1)
+      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeReturn)
+
+    genTest("console/navigateright", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeRight)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeRight)
+      gameState.update(0.1)
+
+    genTest("console/navigateleft", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeLeft)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeLeft)
+      gameState.update(0.1)
+
+    genTest("console/navigatedown", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeDown)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeDown)
+      gameState.update(0.1)
+
+    genTest("console/navigateup", 0):
+      inputs.inputs.simulatePressed(KeyCodeLAlt)
+      inputs.inputs.simulateDownRepeating(KeyCodeUp)
+      gameState.update(0.1)
+      inputs.inputs.simulateClear(KeyCodeLAlt)
+      inputs.inputs.simulateClear(KeyCodeUp)
+      gameState.update(0.1)
+
     quit errorCode
-
-proc draw() =
-
-  gamestate.buffer.render()
-
-  let
-    scrSize = screenSize().vec2
-    scale = min(scrSize.x / gameState.buffer.lineWidth.float32, scrSize.y / gameState.buffer.lineHeight.float32)
-    sizeX = (scale * gameState.buffer.lineWidth.float32)
-    sizeY = (scale * gameState.buffer.lineHeight.float32)
-    size = vec2(sizeX, sizeY) * 2 / scrSize
-
-  var pos = vec3((scrSize.x - sizeX) / 2, (scrSize.y - sizeY) / 2, 1) / vec3(scrSize, 1)
-  pos.y *= -1
-  pos.xy = pos.xy * 2f + vec2(-1f, 1f - size.y)
-
-  let mat = translate(pos) * scale(vec3(size, 0))
-
-  if screenShader.Gluint > 0:
-    with screenShader:
-      screenShader.setUniform("tex", gamestate.buffer.getFrameBufferTexture(), required = false)
-      screenShader.setUniform("mvp", mat, required = false)
-      screenShader.setUniform("fontHeight", gameState.buffer.fontSize, required = false)
-      screenShader.setUniform("time", time, required = false)
-      screenShader.setUniform("screenSize", scrSize, required = false)
-      screenShader.setUniform("curve", gameState.curveAmount)
-      render(rectModel)
 
 addLoggers("keyboardwarrior")
 initTruss("Something", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)

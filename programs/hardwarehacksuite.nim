@@ -87,10 +87,10 @@ proc put*(buffer: var Buffer, gameState: var GameState, hwHack: HardwareHack) =
 
   buffer.newLine()
 
-proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, active: bool) =
-  if active and not hwHack.isHacking:
+proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+  if Draw in flags and not hwHack.isHacking:
 
-    if KeyCodeReturn.isDownRepeating:
+    if KeyCodeReturn.isDownRepeating() and TakeInput in flags:
       hwHack.errorMsg = ""
       try:
         let guess = parseInt(gameState.popInput())
@@ -121,14 +121,15 @@ proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, ac
       hwHack.currentGuess.guessed = true
       hwHack.currentGuess.timeToDeny = int(hwHack.timeToHack)
 
-  if active:
+  if Draw in flags:
     if hwHack.isHacking:
       discard gameState.popInput()
     for guess in hwHack.guesses:
       if guess.guessed and hwHack.currentGuess.timeToDeny == hwHack.actualPassword.len:
-        assert gameState.takeControlOf(hwHack.target)
-        gameState.buffer.put("Hacked into: " & hwHack.target & "\n")
         gameState.exitProgram()
+        assert gameState.takeControlOf(hwHack.target)
+        gameState.buffer.put("Hacked into: " & hwHack.target & "\n>")
+        gamestate.buffer.showCursor(0)
         return
 
     gameState.buffer.put(gameState, hwHack)

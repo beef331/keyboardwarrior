@@ -7,6 +7,7 @@ uniform sampler2D tex;
 uniform vec2 screenSize;
 uniform float time;
 uniform float curve;
+uniform float activeScreen;
 
 
 /*
@@ -21,9 +22,15 @@ uniform float curve;
   newUV += float2(0.5, 0.5);
   i.uv = newUV;
 
-
-
 */
+
+float rectangle(vec2 samplePosition, vec2 halfSize){
+    vec2 componentWiseEdgeDistance = abs(samplePosition) - halfSize;
+    float outsideDistance = length(max(componentWiseEdgeDistance, 0));
+    float insideDistance = min(max(componentWiseEdgeDistance.x, componentWiseEdgeDistance.y), 0);
+    return outsideDistance + insideDistance;
+}
+
 
 vec2 barrelUv(vec2 uv){
   uv -= 0.5;
@@ -34,9 +41,19 @@ vec2 barrelUv(vec2 uv){
 
 void main() {
   vec2 texSize = textureSize(tex, 0);
+  vec2 fragCoord = gl_FragCoord.xy / screenSize;
   vec2 screenTexelSize = 4 / screenSize;
-  vec2 uv = barrelUv(fUv);
+  vec2 uv = barrelUv(fragCoord);
+  float sdf = rectangle(fUv - 0.5, vec2(0.5));
   float closeness = mod(uv.y, screenTexelSize.y) / screenTexelSize.y;
+  float borderSize = -10/ length(texSize);
+  float outline = float(sdf > -10/ length(texSize));
+  float isActive = (activeScreen + 1) / 2;
+  vec4 col = mix(vec4(0, 0.2, 0.8, 1), vec4(1, 1, 0, 1), isActive);
 
-  frag_colour = texture(tex, uv) * pow(closeness, 0.2);
+
+  vec2 theUv = (fUv - 0.5) * (1 - borderSize * 5) + 0.5;
+
+  frag_colour = mix(texture(tex, theUv) * (0.8 + activeScreen * 0.2), col, outline);// * pow(closeness, 0.2);
+  //frag_colour = vec4(sdf > -5/ length(texSize));
 }

@@ -100,12 +100,12 @@ type
     mode*: BufferMode
     pixelHeight: int
     pixelWidth: int
-    atlas: FontAtlas
+    atlas: ref FontAtlas
     fontTarget: UiRenderTarget
-    textShader: Shader
-    graphicShader: Shader
+    textShader: ref Shader
+    graphicShader: ref Shader
 
-    lines: seq[Line]
+    lines: seq[Line] = @[Line()]
     lineHeight*: int
     lineWidth*: int
     cameraPos*: int
@@ -116,14 +116,14 @@ type
 
 
     dirtiedColors: bool = true ## Always upload when just instantiated
-    colors: seq[Color]
-    colorSsbo: SSBO[seq[Color]]
-    colorInd: Table[chroma.Color, int]
+    colors: ref seq[Color]
+    colorSsbo: ref SSBO[seq[Color]]
+    colorInd: ref Table[chroma.Color, int]
 
-    cachedProperties: seq[GlyphProperties] ##
+    cachedProperties: ref seq[GlyphProperties] ##
       ## We cache properties in a seq to keep them sequential and to reuduce size.
       ## this will need cleared out eventually.
-    propToInd: Table[GlyphProperties, uint16]
+    propToInd: ref Table[GlyphProperties, uint16]
 
     time: float32
     properties*: GlyphProperties ## These are for if you do not provide `GlyphProperties`
@@ -135,6 +135,7 @@ type
     graphicCursorX: int = -1
     graphicCursorY: int = -1
 
+proc `$`(b: Buffer): string = "..."
 
 proc pixelHeight*(buff: Buffer): int = buff.pixelHeight
 proc pixelWidth*(buff: Buffer): int = buff.pixelWidth
@@ -147,7 +148,7 @@ const
 
 
 proc recalculateBuffer*(buff: var Buffer) =
-  let charEntry = buff.atlas.runeEntry(Rune('W'))
+  let charEntry = buff.atlas[].runeEntry(Rune('W'))
   buff.pixelWidth = buff.lineWidth * charEntry.rect.w.int div 2
   buff.pixelHeight = buff.lineHeight * charEntry.rect.h.int div 2
   if buff.lines.len == 0:
@@ -158,18 +159,35 @@ proc recalculateBuffer*(buff: var Buffer) =
     buff.useFrameBuffer = true
     buff.frameBufferSetup = true
 
-proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true) =
-  buff.atlas = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
-  buff.textShader = loadShader(guiVert, guiFrag)
-  buff.graphicShader = loadShader(guiVert, shapeFrag)
+proc fontSize*(buff: Buffer): int =  int buff.atlas.font.size
+
+
+proc getPropertyIndex(buff: var Buffer, prop: GlyphProperties): uint16 =
+  buff.propToInd[].withValue prop, val:
+    return val[]
+  do:
+    let ind = uint16 buff.cachedProperties[].len
+    buff.cachedProperties[].add prop
+    buff.propToInd[prop] = ind
+    return ind
+
+proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true, fontSize = 80) =
+  for field in buff.fields:
+    when field is ref:
+      new field
+
+
+  buff.atlas[] = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
+  buff.textShader[] = loadShader(guiVert, guiFrag)
+  buff.graphicShader[] = loadShader(guiVert, shapeFrag)
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
   modelData.append [0u32, 1, 2, 0, 2, 3].items
   modelData.appendUv [vec2(0, 1), vec2(0, 0), vec2(1, 0), vec2(1, 1)].items
 
   buff.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
-  buff.colorSsbo = genSsbo[seq[Color]](1)
-  buff.atlas.font.size = 64
+  buff.colorSsbo[] = genSsbo[seq[Color]](1)
+  buff.atlas.font.size = float fontSize
   buff.noise =
     if seedNoise:
       newOpenSimplex()
@@ -177,15 +195,39 @@ proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, 
       newOpenSimplex(0)
   buff.useFrameBuffer = useFrameBuffer
   buff.recalculateBuffer()
+  discard buff.getPropertyIndex(buff.properties)
 
-proc fontSize*(buff: Buffer): int =  int buff.atlas.font.size
+
+proc initFrom*(buff: var Buffer, source: Buffer, seedNoise = true) =
+  for a, b in buff.fields(source):
+    when a is ref:
+      a = b
+
+  var modelData: MeshData[Vec2]
+  modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
+  modelData.append [0u32, 1, 2, 0, 2, 3].items
+  modelData.appendUv [vec2(0, 1), vec2(0, 0), vec2(1, 0), vec2(1, 1)].items
+
+  buff.fontTarget.model = uploadInstancedModel[RenderInstance](modelData)
+
+  buff.lineWidth = source.lineWidth
+  buff.lineHeight = source.lineHeight
+  buff.properties = source.properties
+  buff.noise =
+    if seedNoise:
+      newOpenSimplex()
+    else:
+      newOpenSimplex(0)
+  buff.useFrameBuffer = source.useFrameBuffer
+  buff.recalculateBuffer()
+
 
 proc setFontSize*(buff: var Buffer, size: int) =
-  buff.atlas.setFontSize(size.float32)
+  buff.atlas[].setFontSize(size.float32)
   buff.recalculateBuffer()
 
 proc setFont*(buff: var Buffer, font: Font) =
-  buff.atlas.setFont(font)
+  buff.atlas[].setFont(font)
   buff.recalculateBuffer()
 
 proc setLineWidth*(buff: var Buffer, width: int) =
@@ -199,23 +241,14 @@ proc setLineHeight*(buff: var Buffer, height: int) =
   buff.recalculateBuffer()
 
 proc getColorIndex(buff: var Buffer, color: chroma.Color): int32 =
-  buff.colorInd.withValue color, ind:
+  buff.colorInd[].withValue color, ind:
     return int32 ind[]
   do:
-    let colInd = buff.colors.len
-    buff.colors.add color
+    let colInd = buff.colors[].len
+    buff.colors[].add color
     buff.colorInd[color] = colInd
     buff.dirtiedColors = true
     return int32 colInd
-
-proc getPropertyIndex(buff: var Buffer, prop: GlyphProperties): uint16 =
-  buff.propToInd.withValue prop, val:
-    return val[]
-  do:
-    let ind = uint16 buff.cachedProperties.len
-    buff.cachedProperties.add prop
-    buff.propToInd[prop] = ind
-    return ind
 
 proc getFrameBufferTexture*(buff: Buffer): lent Texture = buff.frameBuffer.colourTexture
 
@@ -229,6 +262,10 @@ proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 proc propIsVisible(buff: Buffer, prop: GlyphProperties): bool =
   prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0
 
+proc runeSize*(buffer: var Buffer): Vec2 =
+  let entry = buffer.atlas[].runeEntry(Rune '+')
+  vec2(entry.rect.w, entry.rect.h)
+
 proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, ind: int, scale = 1f32, offset: static bool = false): (bool, Rune, Vec2) =
   let
     prop = buff.cachedProperties[int glyph.properties]
@@ -237,12 +274,12 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
         Rune('+')
       else:
         glyph.rune
-    entry = buff.atlas.runeEntry(rune)
+    entry = buff.atlas[].runeEntry(rune)
     theFg = buff.getColorIndex(prop.foreground)
     theBg = buff.getColorIndex(prop.background)
     size =
       if entry.rect.w == 0:
-        buff.atlas.runeEntry(Rune('+')).rect.wh * scale / scrSize
+        buff.runeSize * scale / scrSize
       else:
         entry.rect.wh * scale / scrSize
 
@@ -294,7 +331,7 @@ proc uploadTextMode(buff: var Buffer) =
         vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
       else:
         vec2 screenSize()
-    nonPrintableSize = buff.atlas.runeEntry(Rune('+')).rect
+    nonPrintableSize = buff.atlas[].runeEntry(Rune('+')).rect
   let (startX, startY) = (-1f, 1f - nonPrintableSize.h / scrSize.y)
   var (x, y) = (startX, startY)
   buff.fontTarget.model.clear()
@@ -332,7 +369,7 @@ proc uploadTextMode(buff: var Buffer) =
 
   if rendered:
     if buff.dirtiedColors:
-      buff.colors.copyTo buff.colorSsbo
+      buff.colors[].copyTo buff.colorSsbo[]
       buff.dirtiedColors = false
 
     buff.fontTarget.model.reuploadSsbo()
@@ -419,7 +456,7 @@ proc uploadGraphicsMode(buff: var Buffer) =
 
   if rendered:
     if buff.dirtiedColors:
-      buff.colors.copyTo buff.colorSsbo
+      buff.colors[].copyTo buff.colorSsbo[]
       buff.dirtiedColors = false
 
     buff.fontTarget.model.reuploadSsbo()
@@ -439,18 +476,18 @@ proc render*(buff: Buffer) =
     glViewport(0, 0, buff.pixelWidth, buff.pixelHeight)
     buff.frameBuffer.clear()
     buff.frameBuffer.bindBuffer()
-  buff.colorSsbo.bindBuffer(1)
+  buff.colorSsbo[].bindBuffer(1)
   buff.atlas.ssbo.bindBuffer(2)
 
 
   case buff.mode
   of Text:
-    buff.textShader.makeActive()
-    buff.textShader.setUniform("fontTex", buff.atlas.texture)
+    buff.textShader[].makeActive()
+    buff.textShader[].setUniform("fontTex", buff.atlas.texture)
 
   of Graphics:
-    buff.graphicShader.makeActive()
-    buff.graphicShader.setUniform("fontTex", buff.atlas.texture, false)
+    buff.graphicShader[].makeActive()
+    buff.graphicShader[].setUniform("fontTex", buff.atlas.texture, false)
 
   glEnable(GlBlend)
   glBlendFunc(GlOne, GlOneMinusSrcAlpha)
@@ -496,12 +533,12 @@ proc clearTo*(buff: var Buffer, x, y: int) =
   buff.lines.setLen(y + 1)
   buff.cursorX = x
 
-proc newLine*(buff: var Buffer) =
+proc newLine*(buff: var Buffer, moveCamera = true) =
   assert buff.mode == Text
   buff.lines.add Line()
   inc buff.cursorY
   buff.cursorX = 0
-  if buff.cursorY - buff.cameraPos >= buff.lineHeight:
+  if moveCamera and buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
 iterator chr*(s: string): Rune =
@@ -516,7 +553,10 @@ proc isNewLine(rune: Rune): bool = rune == Rune '\n'
 proc isNewLine(glyph: Glyph): bool = glyph.rune.isNewLine()
 
 
-proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false): auto =
+proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, wrapped = false, getBuffer: static bool = false): auto =
+  ## `moveCamera` indicates whether the camera should move when messages go off screenSize
+  ## `wrapped` means that instead of writting in deadspace a newline will be inserted
+  ## `getBuffer` indicates whether to return the data written over
   assert buff.mode == Text
   when getBuffer:
     result = newSeq[Glyph]()
@@ -531,31 +571,31 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
       result.add buff.lines[buff.cursorY].glyphs[buff.cursorX]
 
     if rune.isNewLine():
-      buff.lines.add Line()
-      buff.cursorX = 0
-      inc buff.cursorY
-    elif buff.cursorX < buff.lineWidth:
+      buff.newLine(moveCamera)
+    else:
+      if wrapped and buff.cursorX + 1 > buff.lineWidth:
+        buff.newLine()
 
+      if buff.cursorX < buff.lineWidth:
+        buff.lines[buff.cursorY].glyphs[buff.cursorX] =
+          when rune is Rune:
+            Glyph(rune: rune, properties: propInd)
+          else:
+            rune
 
-      buff.lines[buff.cursorY].glyphs[buff.cursorX] =
-        when rune is Rune:
-          Glyph(rune: rune, properties: propInd)
-        else:
-          rune
-
-      inc buff.cursorX
+        inc buff.cursorX
 
   if moveCamera and buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
-proc put*(buff: var Buffer, s: string, moveCamera = true) =
-  put buff, s, buff.properties, moveCamera
+proc put*(buff: var Buffer, s: string, moveCamera = true, wrapped = false) =
+  put buff, s, buff.properties, moveCamera, wrapped
 
-proc put*(buff: var Buffer, s: seq[Glyph], props: GlyphProperties, moveCamera = true, getBuffer: static bool = false) = # `seq[Glyph]` != openArray
-  buff.put(s.toOpenArray(0, s.high), props, moveCamera, getBuffer)
+proc put*(buff: var Buffer, s: seq[Glyph], props: GlyphProperties, moveCamera = true, wrapped = false, getBuffer: static bool = false) = # `seq[Glyph]` != openArray
+  buff.put(s.toOpenArray(0, s.high), props, moveCamera, wrapped, getBuffer)
 
-proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true) =
-  put buff, s, buff.properties, moveCamera
+proc put*(buff: var Buffer, s: seq[Glyph], moveCamera = true, wrapped = false) =
+  put buff, s, buff.properties, moveCamera, wrapped
 
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: GlyphProperties) =
   assert buff.mode == Graphics
@@ -576,7 +616,7 @@ proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32, props: Gl
         Rune('+')
       else:
         rune
-    let entry = buff.atlas.runeEntry(rune)
+    let entry = buff.atlas[].runeEntry(rune)
     x += entry.rect.w * scale / 2
 
 proc drawText*(buff: var Buffer, s: string, x, y, rot, scale: float32) =

@@ -22,8 +22,8 @@ proc name(sensor: Sensor): string = "Sensor"
 proc onExit(sensor: var Sensor, gameState: var GameState) = discard
 proc getFlags(_: Sensor): ProgramFlags = {}
 
-proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: bool) =
-  if active:
+proc update(sensor: var Sensor, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+  if Draw in flags:
     var
       props: seq[GlyphProperties]
       nameProp = GlyphProperties(foreground: parseHtmlColor"Orange")
@@ -48,11 +48,12 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, active: b
 
     entries = entries.sortedByIt(it.distance)
 
-    if KeyCodeDown.isDownRepeating():
-      inc sensor.page
+    if TakeInput in flags:
+      if KeyCodeDown.isDownRepeating():
+        inc sensor.page
 
-    if KeyCodeUp.isDownRepeating():
-      dec sensor.page
+      if KeyCodeUp.isDownRepeating():
+        dec sensor.page
 
 
     let
