@@ -99,9 +99,9 @@ else:
 
     genTest("console/username", 0):
       inputs.inputs.inputText() = "t"
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.inputText() = ""
-      gameState.update(0.1)
+      gameState.update(0.0)
 
     genTest("console/loggedin", 0):
       inputs.inputs.simulateDownRepeating(KeyCodeReturn)
@@ -110,75 +110,80 @@ else:
 
     genTest("console/sensors", 0):
       inputs.inputs.inputText() = "sensors"
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.inputText() = ""
       inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/exitprogram", 0):
       inputs.inputs.simulateDown(KeyCodeEscape)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeEscape)
 
     genTest("console/scrollUp", 0):
       inputs.inputs.simulateDownRepeating(KeycodePageUp)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeycodePageUp)
 
     genTest("console/scrollDown", 0):
       inputs.inputs.simulateDownRepeating(KeycodePageDown)
-      gameState.update(0.1)
-      gameState.update(0.1)
+      gameState.update(0.0)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeycodePageDown)
 
     genTest("console/splitv", 0):
       inputs.inputs.inputText() = "splitv"
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/splith", 0):
       inputs.inputs.inputText() = "splith"
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/navigateright", 0):
       inputs.inputs.simulatePressed(KeyCodeLAlt)
       inputs.inputs.simulateDownRepeating(KeyCodeRight)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeLAlt)
       inputs.inputs.simulateClear(KeyCodeRight)
-      gameState.update(0.1)
+      gameState.update(0.0)
 
     genTest("console/navigateleft", 0):
       inputs.inputs.simulatePressed(KeyCodeLAlt)
       inputs.inputs.simulateDownRepeating(KeyCodeLeft)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeLAlt)
       inputs.inputs.simulateClear(KeyCodeLeft)
-      gameState.update(0.1)
+      gameState.update(0.0)
 
     genTest("console/navigatedown", 0):
       inputs.inputs.simulatePressed(KeyCodeLAlt)
       inputs.inputs.simulateDownRepeating(KeyCodeDown)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeLAlt)
       inputs.inputs.simulateClear(KeyCodeDown)
-      gameState.update(0.1)
+      gameState.update(0.0)
 
     genTest("console/navigateup", 0):
       inputs.inputs.simulatePressed(KeyCodeLAlt)
       inputs.inputs.simulateDownRepeating(KeyCodeUp)
-      gameState.update(0.1)
+      gameState.update(0.0)
       inputs.inputs.simulateClear(KeyCodeLAlt)
       inputs.inputs.simulateClear(KeyCodeUp)
-      gameState.update(0.1)
+      gameState.update(0.0)
 
     quit errorCode
 
 addLoggers("keyboardwarrior")
-initTruss("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)
+const flags =
+  when defined(testing):
+    {}
+  else:
+    {Resizable}
+initTruss("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
