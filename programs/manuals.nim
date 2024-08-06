@@ -1,3 +1,4 @@
+{.used.}
 import gamestates, eventprinter
 import std/strscans
 

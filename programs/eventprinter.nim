@@ -1,3 +1,4 @@
+{.used.}
 import gamestates
 import std/[strutils, xmltree, htmlparser, strscans]
 

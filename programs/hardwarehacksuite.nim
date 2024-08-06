@@ -1,3 +1,4 @@
+{.used.}
 import ../screenutils/[texttables, progressbars]
 import pkg/truss3D/inputs
 import std/[algorithm, strutils, math, random, sets, strutils]

@@ -1,3 +1,4 @@
+{.used.}
 import gamestates
 import ../screenutils/texttables
 import ../data/spaceentity

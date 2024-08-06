@@ -1,3 +1,4 @@
+{.used.}
 import gamestates
 import std/[strscans, setutils, strbasics]
 import "$projectdir"/data/[spaceentity, insensitivestrings]

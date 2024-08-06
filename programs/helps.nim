@@ -1,3 +1,4 @@
+{.used.}
 import gamestates
 
 proc helpHandler(gameState: var GameState, input: string) =

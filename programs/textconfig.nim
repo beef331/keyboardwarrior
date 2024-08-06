@@ -1,3 +1,4 @@
+{.used.}
 import std/[strscans, strutils]
 import gamestates
 import ../screenutils/screenrenderer
