@@ -16,4 +16,4 @@ requires "https://github.com/beef331/traitor >= 0.2.15"
 requires "opensimplexnoise >= 0.2.0"
 
 task buildWindowsRelease, "Builds a windows release duhhhh":
-  selfExec("c --d:mingw ./keyboardwarrior.nim")
+  selfExec("c -d:mingw -d:strip -d:lto ./keyboardwarrior.nim")
