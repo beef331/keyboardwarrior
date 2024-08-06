@@ -181,4 +181,4 @@ else:
     quit errorCode
 
 addLoggers("keyboardwarrior")
-initTruss("Something", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)
+initTruss("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, vsync = true)
