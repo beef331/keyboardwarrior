@@ -6,7 +6,6 @@ import pkg/truss3D/[inputs, logging]
 
 var
   gameState: GameState
-  coverTex: Texture
   screenShader: Shader
   rectModel: Model
   time: float32
@@ -14,7 +13,6 @@ var
 
 proc init =
   gameState = GameState.init()
-  coverTex = genTexture()
 
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
@@ -23,7 +21,6 @@ proc init =
 
   rectModel = uploadData(modelData)
 
-  readImage("console.png").copyTo coverTex
   screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
