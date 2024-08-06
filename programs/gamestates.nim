@@ -202,7 +202,9 @@ proc showInput*(gameState: var GameState, renderFlags = {WithCursor}) =
 import programutils
 export programutils
 
-importAllCommands()
+import
+  helps, combats, eventprinter, hardwarehacksuite, manuals,
+  maps, sensors, shops, statuses, textconfig
 
 proc insert(s: var string, at: int, toInsert: string) =
   let origEnd = s.high
