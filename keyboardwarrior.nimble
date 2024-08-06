@@ -14,3 +14,6 @@ requires "nim >= 2.0.0"
 requires "https://github.com/beef331/truss3d >= 0.2.33"
 requires "https://github.com/beef331/traitor >= 0.2.15"
 requires "opensimplexnoise >= 0.2.0"
+
+task buildWindowsRelease, "Builds a windows release duhhhh":
+  selfExec("c --d:mingw ./keyboardwarrior.nim")
