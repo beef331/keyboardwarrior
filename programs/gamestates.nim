@@ -3,6 +3,7 @@ import ../data/[spaceentity, insensitivestrings]
 import pkg/[traitor, chroma, pixie]
 import std/[tables, strutils, hashes, random]
 import pkg/truss3D/[inputs]
+import screens
 
 export screenrenderer, chroma, pixie
 
@@ -32,43 +33,6 @@ type
   InputShow = enum
     WithCursor
     WithSuggestion
-
-  TextInput* = object
-    str*: string
-    pos*: int
-    suggestionInd*: int = -1
-    suggestion*: string
-
-  ScreenKind = enum
-    NoSplit
-    SplitH
-    SplitV
-
-  ScreenAction = enum
-    Nothing
-    Close
-    SplitH
-    SplitV
-
-  Screen = ref object
-    x*, y*, w*, h*: float32
-    parent: Screen
-    case kind: ScreenKind
-    of NoSplit:
-      buffer*: Buffer
-      activeProgram: InsensitiveString
-      input: TextInput
-      programX: int
-      programY: int
-      shipStack: seq[string] ## Stack of names for which ship is presently controlled
-        ## [^1] is active
-        ## [0] is the player's
-      action: ScreenAction
-    of SplitH, SplitV:
-      left*: Screen
-      right*: Screen
-
-  ScreenObj = typeof(Screen()[])
 
   GameState* = object
     rootScreen: Screen
@@ -101,15 +65,8 @@ iterator commands*(gameState: GameState): Command =
     yield command
 
 iterator screens*(gameState: var GameState): Screen =
-  var queue = @[gameState.rootScreen]
-  while queue.len > 0:
-    let screen = queue.pop()
-    case screen.kind
-    of NoSplit:
-      if screen.w != 0 and screen.h != 0:
-        yield screen
-    else:
-      queue.add [screen.left, screen.right]
+  for screen in gameState.rootScreen.screens:
+    yield screen
 
 proc input(gameState: GameState): lent TextInput = gameState.screen.input
 proc input(gameState: var GameState): var TextInput = gameState.screen.input
@@ -292,47 +249,6 @@ proc splitHorizontal(gameState: var GameState, screen: Screen) =
   gameState.screen = screen.left
   inc gameState.screenCount
 
-proc recalculate(screen: Screen) =
-  var screens = @[screen]
-  while screens.len > 0:
-    let screen = screens.pop()
-    case screen.kind
-    of SplitV:
-      screen.left.x = screen.x
-      screen.right.x = screen.x + screen.w / 2
-      screen.left.y = screen.y
-      screen.right.y = screen.y
-
-      screen.left.h = screen.h
-      screen.right.h = screen.h
-
-      screen.left.w = screen.w / 2
-      screen.right.w = screen.w / 2
-
-
-      screens.add screen.left
-      screens.add screen.right
-
-    of SplitH:
-      screen.left.x = screen.x
-      screen.right.x = screen.x
-      screen.left.y = screen.y
-      screen.right.y = screen.y + screen.h / 2
-
-      screen.left.h = screen.h / 2
-      screen.right.h = screen.h / 2
-
-      screen.left.w = screen.w
-      screen.right.w = screen.w
-
-
-      screens.add screen.left
-      screens.add screen.right
-
-    of NoSplit:
-      screen.buffer.setLineWidth(int screen.w)
-      screen.buffer.setLineHeight(int screen.h)
-
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
   screen.action = Nothing
   let
@@ -368,61 +284,9 @@ proc closeScreen(gameState: var Gamestate, screen: Screen) =
 
   dec gameState.screenCount
 
-type FocusDirection = enum Up, Right, Down, Left
 
 proc focus(gameState: var Gamestate, dir: FocusDirection) =
-  var
-    distX = float32.high
-    distY = float32.high
-    toSelect = gameState.screen
-  let currentScreen = toSelect
-
-  case dir
-  of Up:
-    for screen in gameState.screens:
-      if screen != currentScreen:
-        let
-          scrDistX = abs(screen.x - currentScreen.x)
-          scrDistY = abs(screen.y - currentScreen.y)
-        if screen.y < currentScreen.y and scrDistX <= distX and scrDistY <= distY:
-          toSelect = screen
-          distX = scrDistx
-          distY = scrDistY
-
-
-  of Right:
-    for screen in gameState.screens:
-      if screen != currentScreen:
-        let
-          scrDistX = abs(screen.x - currentScreen.x)
-          scrDistY = abs(screen.y - currentScreen.y)
-        if screen.x > currentScreen.x and scrDistX <= distX and scrDistY <= distY:
-          toSelect = screen
-          distX = scrDistx
-          distY = scrDistY
-
-  of Down:
-    for screen in gameState.screens:
-      if screen != currentScreen:
-        let
-          scrDistX = abs(screen.x - currentScreen.x)
-          scrDistY = abs(screen.y - currentScreen.y)
-        if screen.y > currentScreen.y and scrDistX <= distX and scrDistY <= distY:
-          toSelect = screen
-          distX = scrDistx
-          distY = scrDistY
-  of Left:
-    for screen in gameState.screens:
-      if screen != currentScreen:
-        let
-          scrDistX = abs(screen.x - currentScreen.x)
-          scrDistY = abs(screen.y - currentScreen.y)
-        if screen.x < currentScreen.x and scrDistX <= distX and scrDistY <= distY:
-          toSelect = screen
-          distX = scrDistx
-          distY = scrDistY
-
-  gameState.screen = toSelect
+  gameState.screen = gameState.rootScreen.focus(gameState.screen, dir)
 
 proc init*(_: typedesc[GameState]): GameState =
   #[
