@@ -105,7 +105,7 @@ type
     textShader: ref Shader
     graphicShader: ref Shader
 
-    lines: seq[Line] = @[Line()]
+    lines: seq[Line]
     lineHeight*: int
     lineWidth*: int
     cameraPos*: int

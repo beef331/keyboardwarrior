@@ -4,11 +4,13 @@ import programs/[gamestates]
 import pkg/[vmath, pixie, truss3D]
 import pkg/truss3D/[inputs, logging]
 
+import pkg/potato
+
 var
-  gameState: GameState
-  screenShader: Shader
-  rectModel: Model
-  shaderModificationTime: Time
+  gameState {.persistent.}: GameState
+  screenShader {.persistent.}: Shader
+  rectModel {.persistent.}: Model
+  shaderModificationTime {.persistent.}: Time
 
 proc init(truss: var Truss) =
   gameState = GameState.init()
@@ -184,6 +186,11 @@ const flags =
     {}
   else:
     {Resizable}
-var truss = Truss.init("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
-while truss.isRunning:
+var truss {.persistent.} = Truss.init("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
+
+proc potatoMain() {.exportc, dynlib.} =
   truss.update()
+  if truss.inputs.isDown(KeyCodeF11):
+    potatoCompileIt()
+
+  echo "hello"

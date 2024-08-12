@@ -7,6 +7,8 @@ import screens
 
 export screenrenderer, chroma, pixie
 
+const ShellCarrot* = ">"
+
 type
   ProgramFlag* = enum
     Blocking ## For things like manpage, no need to clear just do not print `> ...` next
@@ -181,7 +183,7 @@ proc splitVertical(gameState: var GameState, screen: Screen) =
     lineHeight: screen.buffer.lineHeight
   )
   buff.initFrom(gamestate.screen.buffer)
-  buff.put(">")
+  buff.put(ShellCarrot)
   buff.showCursor(0)
 
   var oldScreen = move screen[]
@@ -220,7 +222,7 @@ proc splitHorizontal(gameState: var GameState, screen: Screen) =
     lineHeight: screen.buffer.lineHeight,
   )
   buff.initFrom(gamestate.screen.buffer)
-  buff.put(">")
+  buff.put(ShellCarrot)
   buff.showCursor(0)
   var oldScreen = move screen[]
   let origHeight = oldScreen.h
@@ -561,7 +563,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
       gameState.screen.shipStack.add name
       gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
-      gameState.buffer.put ">"
+      gameState.buffer.put ShellCarrot
       gameState.showInput()
 
     gameState.screen.buffer.upload(dt, truss.windowSize.vec2)
@@ -625,7 +627,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
           if not gameState.screen.inProgram and dirtiedInput:
             gameState.buffer.clearLine()
-            gameState.buffer.put(">")
+            gameState.buffer.put(ShellCarrot)
             if gameState.input.suggestion.len > 0:
               gameState.showInput({WithCursor, WithSuggestion})
             else:
@@ -646,7 +648,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
       if screen.inProgram and isActiveScreen:
         if truss.inputs.isDown(KeyCodeEscape):
           gameState.exitProgram()
-          gameState.buffer.put ">"
+          gameState.buffer.put ShellCarrot
           gamestate.buffer.showCursor(0)
 
       gameState.screen = oldScreen

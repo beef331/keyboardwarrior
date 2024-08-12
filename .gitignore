@@ -5,3 +5,4 @@
 *.exe
 *.debug.png
 *.test.png
+*.so
