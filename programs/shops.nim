@@ -2,8 +2,9 @@
 import gamestates
 import ../data/spaceentity
 import ../screenutils/[texttables, boxes]
-import truss3D/inputs
+import pkg/truss3D/inputs
 import std/[random, strutils]
+import pkg/truss3D
 
 proc moneyFormat(val: SomeNumber): string = "$" & $val
 
@@ -41,29 +42,29 @@ proc name(shop: Shop): string = "Shop"
 proc onExit(shop: var Shop, gameState: var GameState) = discard
 proc getFlags(_: Shop): ProgramFlags = {}
 
-proc update(shop: var Shop, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+proc update(shop: var Shop, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if Draw in flags:
     if TakeInput in flags:
       case shop.state
       of BrowsingShop:
-        if KeyCodeUp.isDownRepeating():
+        if truss.inputs.isDownRepeating(KeyCodeUp):
           shop.position = max(shop.position - 1, 0)
 
-        if KeyCodeDown.isDownRepeating():
+        if truss.inputs.isDownRepeating(KeyCodeDown):
           shop.position = min(shop.position + 1, shopData.high)
 
-        if KeyCodeReturn.isDownRepeating():
+        if truss.inputs.isDownRepeating(KeyCodeReturn):
           shop.state = Purchasing
           shop.amount = 1
 
       of Purchasing:
-        if KeyCodeUp.isDownRepeating():
+        if truss.inputs.isDownRepeating(KeyCodeUp):
           shop.amount = min(shop.amount + 1, shopData[shop.position].count)
 
-        if KeyCodeDown.isDownRepeating():
+        if truss.inputs.isDownRepeating(KeyCodeDown):
           shop.amount = max(shop.amount - 1, 1)
 
-        if KeyCodeReturn.isDown():
+        if truss.inputs.isDownRepeating(KeyCodeReturn):
           shopData[shop.position].count -= shop.amount
           if shopData[shop.position].count == 0:
             shopData.delete(shop.position)

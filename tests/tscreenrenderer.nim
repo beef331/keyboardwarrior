@@ -14,7 +14,7 @@ template genTest(name: string, dt: float32, body: untyped) =
   buffer.clearTo(0)
   buffer.properties.background = color(0, 0, 0, 1)
   body
-  buffer.upload(dt)
+  buffer.upload(dt, truss.windowSize.vec2)
   buffer.render()
 
   var img = newImage(buffer.pixelWidth, buffer.pixelHeight)
@@ -34,7 +34,7 @@ template genTest(name: string, dt: float32, body: untyped) =
       errorCode = 1
 
 
-proc init =
+proc init(truss: var Truss) =
   buffer.initResources(fontPath, true, false)
   buffer.setFontSize 30
   genTest("basictest", 3):
@@ -69,10 +69,12 @@ proc init =
 
   quit errorCode
 
-proc update(dt: float32) = discard
+proc update(truss: var Truss, dt: float32) = discard
 
 
-proc draw = discard
+proc draw(truss: var Truss) = discard
 
 
-initTruss("Something", ivec2(800, 600), init, update, draw, flags = {})
+var truss = Truss.init("Something", ivec2(800, 600), init, update, draw, flags = {})
+assert truss.isRunning
+truss.update()

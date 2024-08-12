@@ -19,11 +19,11 @@ proc handleTextChange(gamestate: var GameState, input: string) =
             field = parseHtmlColor(val)
           gamestate.buffer.put ($gamestate.buffer.properties).replace(",", ",\n") & "\n"
         except CatchableError as e:
-          gamestate.writeError(e.msg & "\n")
+          gamestate.writeError(e.msg)
     if not foundName:
-      gamestate.writeError("No property named `$#`\nValid property names are:\n$#\n" % [toSetField, static(validNames.join("\n"))])
+      gamestate.writeError("No property named `$#`\nValid property names are:\n$#" % [toSetField, static(validNames.join("\n"))])
   else:
-    gamestate.writeError("Incorrect command expected `text propertyName value`\n")
+    gamestate.writeError("Incorrect command expected `text propertyName value`")
 
 proc textSuggest(gameState: GameState, input: string, ind: var int): string =
   const names = static(validNames)

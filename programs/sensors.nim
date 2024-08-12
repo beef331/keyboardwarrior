@@ -4,6 +4,7 @@ import ../screenutils/texttables
 import ../data/spaceentity
 import std/[algorithm, strutils]
 import pkg/truss3D/inputs
+import pkg/truss3D
 
 proc formatSpeed(f: float32): string =
   formatFloat(f, ffDecimal, precision = 2)
@@ -23,7 +24,7 @@ proc name(sensor: Sensor): string = "Sensor"
 proc onExit(sensor: var Sensor, gameState: var GameState) = discard
 proc getFlags(_: Sensor): ProgramFlags = {}
 
-proc update(sensor: var Sensor, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+proc update(sensor: var Sensor, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if Draw in flags:
     var
       props: seq[GlyphProperties]
@@ -50,10 +51,10 @@ proc update(sensor: var Sensor, gameState: var GameState, dt: float32, flags: Pr
     entries = entries.sortedByIt(it.distance)
 
     if TakeInput in flags:
-      if KeyCodeDown.isDownRepeating():
+      if truss.inputs.isDownRepeating(KeyCodeDown):
         inc sensor.page
 
-      if KeyCodeUp.isDownRepeating():
+      if truss.inputs.isDownRepeating(KeyCodeUp):
         dec sensor.page
 
 

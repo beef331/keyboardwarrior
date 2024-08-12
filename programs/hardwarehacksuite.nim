@@ -1,6 +1,7 @@
 {.used.}
 import ../screenutils/[texttables, progressbars]
 import pkg/truss3D/inputs
+import pkg/truss3D
 import std/[algorithm, strutils, math, random, sets, strutils]
 import gamestates
 import ../data/spaceentity
@@ -88,10 +89,10 @@ proc put*(buffer: var Buffer, gameState: var GameState, hwHack: HardwareHack) =
 
   buffer.newLine()
 
-proc update*(hwHack: var HardwareHack, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+proc update*(hwHack: var HardwareHack, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if Draw in flags and not hwHack.isHacking:
 
-    if KeyCodeReturn.isDownRepeating() and TakeInput in flags:
+    if truss.inputs.isDownRepeating(KeyCodeReturn) and TakeInput in flags:
       hwHack.errorMsg = ""
       try:
         let guess = parseInt(gameState.popInput())
@@ -156,12 +157,12 @@ proc hhs(gamestate: var GameState, input: string) =
           ch = gameState.randState.sample(Digits + Letters)
         gameState.enterProgram(HardwareHack.init(20, gameState.randState.rand(0..10), input, password, 3).toTrait(Program))
       else:
-        gameState.writeError("Ship named: '" & input & "'. Has no network connection.\n")
+        gameState.writeError("Ship named: '" & input & "'. Has no network connection.")
     else:
-      gameState.writeError("Cannot hack '" & $gameState.getEntity(input).kind & "'s.\n")
+      gameState.writeError("Cannot hack '" & $gameState.getEntity(input).kind & "'s")
 
   else:
-    gameState.writeError("Cannot find any entity named: '" & input & "'.\n")
+    gameState.writeError("Cannot find any entity named: '" & input & "'.")
 
 
 iterator hackableEntities(gameState: GameState): string =

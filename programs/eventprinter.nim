@@ -54,7 +54,7 @@ proc eventHandler(gameState: var GameState, str: string) =
     errored = true
 
   if errored:
-    gameState.writeError("Failed to display event\n")
+    gameState.writeError("Failed to display event.")
 
 
 command(

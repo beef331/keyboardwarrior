@@ -4,6 +4,7 @@ import ../screenutils/texttables
 import ../data/spaceentity
 import std/[algorithm, strutils]
 import pkg/truss3D/inputs
+import pkg/truss3D
 
 proc formatSpeed(f: float32): string =
   formatFloat(f, ffDecimal, precision = 2)
@@ -15,7 +16,7 @@ proc name(sensor: Map): string = "Map"
 proc onExit(sensor: var Map, gameState: var GameState) = gameState.buffer.mode = Text
 proc getFlags(_: Map): ProgramFlags = {}
 
-proc update(sensor: var Map, gameState: var GameState, dt: float32, flags: ProgramFlags) =
+proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if Draw in flags:
     gameState.buffer.clearShapes()
     gamestate.buffer.mode = Graphics

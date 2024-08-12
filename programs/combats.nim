@@ -12,18 +12,18 @@ proc targetHandler(gameState: var GameState, input: string) =
       if sys.name == InsensitiveString(bay):
         found = true
         if not gameState.world.entityExists(target):
-          gameState.writeError("No target named: '" & target & "'.\n")
+          gameState.writeError("No target named: '" & target & "'.")
         else:
           sys.weaponTarget = target
         break
 
 
     if not found:
-      gameState.writeError("No bay named: '" & bay & "'.\n")
+      gameState.writeError("No bay named: '" & bay & "'.")
 
 
   else:
-    gameState.writeError("Expected: 'target WeaponBay Target'\n")
+    gameState.writeError("Expected: 'target WeaponBay Target'.")
 
 iterator bays(gameState: GameState, hasTarget = false): string =
   for wBay in gameState.activeShipEntity.poweredSystemsOf({WeaponBay, ToolBay}):
@@ -58,22 +58,22 @@ proc fireHandler(gameState: var GameState, input: string) =
       if sys.name == InsensitiveString(bay):
         found = true
         if sys.kind == ToolBay:
-          gameState.writeError("Cannot fire a toolbay.\n")
+          gameState.writeError("Cannot fire a toolbay.")
         elif Powered notin sys.flags:
-          gameState.writeError("Cannot fire a unpowered weapon bay.\n")
+          gameState.writeError("Cannot fire a unpowered weapon bay.")
         elif not gameState.world.entityExists(sys.weaponTarget):
-          gameState.writeError("Invalid target.\n")
+          gameState.writeError("Invalid target")
         else:
           sys.flags[Toggled] = Toggled notin sys.flags
         break
 
 
     if not found:
-      gameState.writeError("No bay named: '" & bay & "'.\n")
+      gameState.writeError("No bay named: '" & bay & "'")
 
 
   else:
-    gameState.writeError("Expected: 'fire BayName'\n")
+    gameState.writeError("Expected: 'fire BayName'.")
 
 proc fireSuggest(gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()

@@ -323,14 +323,14 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
 
 proc clearShapes*(buff: var Buffer) = buff.shapes.setLen(0)
 
-proc uploadTextMode(buff: var Buffer) =
+proc uploadTextMode(buff: var Buffer, screenSize: Vec2) =
   assert buff.mode == Text
   let
     scrSize =
       if buff.useFrameBuffer:
         vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
       else:
-        vec2 screenSize()
+        screenSize
     nonPrintableSize = buff.atlas[].runeEntry(Rune('+')).rect
   let (startX, startY) = (-1f, 1f - nonPrintableSize.h / scrSize.y)
   var (x, y) = (startX, startY)
@@ -427,13 +427,13 @@ proc uploadShape(buff: var Buffer, scrSize: Vec2, shape: Shape, ind: int): bool 
       wh: wh
       )
 
-proc uploadGraphicsMode(buff: var Buffer) =
+proc uploadGraphicsMode(buff: var Buffer, screenSize: Vec2) =
   assert buff.mode == Graphics
   let scrSize =
     if buff.useFrameBuffer:
       vec2(buff.pixelWidth.float32, buff.pixelHeight.float32)
     else:
-      vec2 screenSize()
+      screenSize
 
   buff.fontTarget.model.clear()
   var rendered: bool
@@ -461,13 +461,13 @@ proc uploadGraphicsMode(buff: var Buffer) =
 
     buff.fontTarget.model.reuploadSsbo()
 
-proc upload*(buff: var Buffer, dt: float32) =
+proc upload*(buff: var Buffer, dt: float32, screenSize: Vec2) =
   buff.time += dt
   case buff.mode
   of Text:
-    buff.uploadTextMode()
+    buff.uploadTextMode(screenSize)
   of Graphics:
-    buff.uploadGraphicsMode()
+    buff.uploadGraphicsMode(screenSize)
 
 proc render*(buff: Buffer) =
   var old: (Glint, Glint, GlSizeI, GlSizeI)
@@ -715,9 +715,9 @@ when isMainModule:
     buff = Buffer(lineWidth: 40, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
     fontPath = "../PublicPixel.ttf"
 
-  proc init =
+  proc init(truss: var Truss) =
     buff.initResources(fontPath, seedNoise = false)
-    startTextInput(default(inputs.Rect), "")
+    truss.inputs.startTextInput(default(inputs.Rect), "")
     buff.put("hello world!", GlyphProperties(foreground: parseHtmlColor"Green", background: parseHtmlColor"Yellow", sineSpeed: 5f, sineStrength: 10f))
     buff.put(" bleh \n\n", GlyphProperties(foreground: parseHtmlColor"Green"))
     buff.put("\nHello travllllllerrrrs", GlyphProperties(foreground: parseHtmlColor"Purple", background: parseHtmlColor"Beige", shakeSpeed: 5f, shakeStrength: 10f))
@@ -727,20 +727,20 @@ when isMainModule:
 
   var textScale = 1f
 
-  proc update(dt: float32) =
+  proc update(truss: var Truss, dt: float32) =
     if buff.mode == Text:
       if isTextInputActive():
-        if inputText().len > 0:
-          buff.put inputText()
-          setInputText("")
-        if KeyCodeReturn.isDownRepeating():
+        if truss.inputs.inputText().len > 0:
+          buff.put truss.inputs.inputText()
+          truss.inputs.setInputText("")
+        if truss.inputs.isDownRepeating(KeyCodeReturn):
           buff.put("\n>")
-      if KeyCodeUp.isDownRepeating():
+      if truss.inputs.isDownRepeating(KeyCodeUp):
         buff.scrollUp()
-      if KeyCodeDown.isDownRepeating():
+      if truss.inputs.isDownRepeating(KeyCodeDown):
         buff.scrollDown()
 
-      if KeyCodeInsert.isDownRepeating():
+      if truss.inputs.isDownRepeating(KeyCodeInsert):
         buff.mode = Graphics
     else:
       buff.shapes.setLen(0)
@@ -752,20 +752,19 @@ when isMainModule:
       buff.drawBox(120, 120, 10, GlyphProperties(foreground: parseHtmlColor"Orange", blinkSpeed: 4f))
 
       let
-        scaledX = getMousePos().x.float32
-        scaledY = getMousePos().y.float32
+        scaledX = truss.inputs.getMousePos().x.float32
+        scaledY = truss.inputs.getMousePos().y.float32
 
-      buff.drawText("Hello", scaledX * 2, scaledY * 2, 0, textScale, GlyphProperties(foreground: parseHtmlColor"Blue", shakeStrength: 5f, shakeSpeed: 4f))
-      textScale += getMouseScroll().float32 * 10 * dt
+      buff.drawText("Hello", scaledX, scaledY, 0, textScale, GlyphProperties(foreground: parseHtmlColor"Blue", shakeStrength: 5f, shakeSpeed: 4f))
+      textScale += truss.inputs.getMouseScroll().float32 * 10 * dt
 
-      if KeyCodeInsert.isDownRepeating():
+      if truss.inputs.isDownRepeating(KeyCodeInsert):
         buff.mode = Text
 
+    buff.upload(dt, truss.windowSize.vec2)
 
-
-
-    buff.upload(dt)
-
-  proc draw =
+  proc draw(truss: var Truss) =
     buff.render()
-  initTruss("Something", ivec2(1280, 720), init, update, draw, vsync = true, flags = {})
+  var truss = Truss.init("Something", ivec2(1280, 720), init, update, draw, vsync = true, flags = {})
+  while truss.isRunning:
+    truss.update()

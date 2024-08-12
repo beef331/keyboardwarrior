@@ -1,6 +1,6 @@
 import ../screenutils/screenrenderer
 import ../data/[spaceentity, insensitivestrings]
-import pkg/[traitor, chroma, pixie]
+import pkg/[traitor, chroma, pixie, truss3D]
 import std/[tables, strutils, hashes, random]
 import pkg/truss3D/[inputs]
 import screens
@@ -17,7 +17,7 @@ type
 
   Program* = distinct tuple[
     onExit: proc(_: var Atom, gameState: var GameState) {.nimcall.},
-    update: proc(_: var Atom, gameState: var GameState, dt: float32, active: ProgramFlags) {.nimcall.},
+    update: proc(_: var Atom, gameState: var GameState, truss: var Truss, dt: float32, active: ProgramFlags) {.nimcall.},
     name: proc(_: Atom): string {.nimcall.},
     getFlags: proc(_: Atom): set[ProgramFlag] {.nimcall.}
   ]
@@ -76,6 +76,7 @@ proc buffer*(gameState: var GameState): var Buffer =
 
 proc writeError*(gameState: var GameState, msg: string) =
   gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
+  gameState.buffer.newLine()
 
 proc activeShip*(gameState: GameState): lent string =
   gameState.screen.shipStack[gameState.screen.shipStack.high]
@@ -161,7 +162,7 @@ export programutils
 
 import
   helps, combats, eventprinter, hardwarehacksuite, manuals,
-  maps, sensors, shops, statuses, textconfig
+  maps, sensors, shops, statuses, textconfig, locomotion
 
 proc insert(s: var string, at: int, toInsert: string) =
   let origEnd = s.high
@@ -340,10 +341,9 @@ proc init*(_: typedesc[GameState]): GameState =
           parseFloat(amount.strip())
         except CatchableError as e:
           gameState.writeError(e.msg)
-          gameState.buffer.newLine()
           return
       if amnt notin 0f..1f:
-        gameState.writeError("Expected value in `0..1` range.\n")
+        gameState.writeError("Expected value in `0..1` range.")
       else:
         gameState.curveAmount = amnt
 
@@ -388,7 +388,7 @@ proc init*(_: typedesc[GameState]): GameState =
     help: "Splits the current terminal vertically. The left side maintains history",
     handler: proc(gameState: var GameState, _: string) =
       if gameState.buffer.lineWidth div 2 < 10:
-        gameState.writeError("Cannot make the buffer, width would be too small\n")
+        gameState.writeError("Cannot make the buffer, width would be too small")
         return
       gameState.screen.action = SplitV
 
@@ -457,7 +457,7 @@ proc dispatchCommand(gameState: var GameState) =
       gameState.clearSuggestion()
       gamestate.handlers[command].handler(gameState, input[ind + 1 .. input.high])
     else:
-      gameState.writeError("Incorrect command\n")
+      gameState.writeError("Incorrect command")
 
 
 proc suggest(gameState: var GameState) =
@@ -491,28 +491,30 @@ proc currentProgramFlags(gameState: GameState, screen: Screen): ProgramFlags =
   else:
     {}
 
-proc update*(gameState: var GameState, dt: float) =
+proc update*(gameState: var GameState, truss: var Truss, dt: float) =
   var dirtiedInput = false
   proc dirtyInput() = dirtiedInput = true
 
-  if KeycodeLAlt.isPressed():
-    if KeycodeUp.isDownRepeating():
+  let lAltPressed = truss.inputs.isPressed(KeycodeLAlt)
+
+  if lAltPressed:
+    if truss.inputs.isDownRepeating(KeyCodeUp):
       gameState.focus(Up)
       dirtyInput()
-    if KeycodeRight.isDownRepeating():
+    if truss.inputs.isDownRepeating(KeyCodeRight):
       gameState.focus(Right)
       dirtyInput()
-    if KeycodeDown.isDownRepeating():
+    if truss.inputs.isDownRepeating(KeyCodeDown):
       gameState.focus(Down)
       dirtyInput()
-    if KeycodeLeft.isDownRepeating():
+    if truss.inputs.isDownRepeating(KeyCodeLeft):
       gameState.focus(Left)
       dirtyInput()
 
-  if inputText().len > 0:
-    gameState.input.str.insert gameState.input.pos, inputText()
-    gameState.input.pos.inc inputText().len
-    setInputText("")
+  if truss.inputs.inputText().len > 0:
+    gameState.input.str.insert gameState.input.pos, truss.inputs.inputText()
+    gameState.input.pos.inc truss.inputs.inputText().len
+    truss.inputs.setInputText("")
     gameState.clearSuggestion()
     dirtyInput()
 
@@ -522,19 +524,19 @@ proc update*(gameState: var GameState, dt: float) =
   if startShipCount > 0:
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
-  if KeyCodeBackspace.isDownRepeating() and gameState.input.pos > 0 and gameState.input.str.len > 0:
+  if truss.inputs.isDownRepeating(KeyCodeBackspace) and gameState.input.pos > 0 and gameState.input.str.len > 0:
     gameState.input.str.delete(gameState.input.pos - 1 .. gameState.input.pos - 1)
     dec gameState.input.pos
     gameState.clearSuggestion()
     dirtyInput()
 
 
-  if KeycodeLeft.isDownRepeating and not KeycodeLAlt.isPressed():
+  if truss.inputs.isDownRepeating(KeyCodeLeft) and not lAltPressed:
     gameState.input.pos = max(gameState.input.pos - 1, 0)
     dirtyInput()
 
 
-  if KeycodeRight.isDownRepeating and not KeycodeLAlt.isPressed():
+  if truss.inputs.isDownRepeating(KeyCodeRight) and not lAltPressed:
     if gameState.input.suggestionInd != -1:
       gameState.takeSuggestion()
     else:
@@ -543,7 +545,7 @@ proc update*(gameState: var GameState, dt: float) =
 
 
 
-  if KeycodeTab.isDownRepeating():
+  if truss.inputs.isDownRepeating(KeycodeTab):
     gameState.suggest()
     dirtyInput()
 
@@ -554,7 +556,7 @@ proc update*(gameState: var GameState, dt: float) =
     gameState.buffer.clearLine()
     gameState.showInput()
 
-    if KeyCodeReturn.isDownRepeating() and gameState.input.str.len > 0:
+    if truss.inputs.isDownRepeating(KeycodeReturn)and gameState.input.str.len > 0:
       let name = gameState.popInput()
       gameState.screen.shipStack.add name
       gameState.world.init(name, name) # TODO: Take a seed aswell
@@ -562,7 +564,7 @@ proc update*(gameState: var GameState, dt: float) =
       gameState.buffer.put ">"
       gameState.showInput()
 
-    gameState.screen.buffer.upload(dt)
+    gameState.screen.buffer.upload(dt, truss.windowSize.vec2)
   else:
     gamestate.world.update(dt)
 
@@ -575,7 +577,7 @@ proc update*(gameState: var GameState, dt: float) =
             found = true
             break
         if not found:
-          program.update(gamestate, dt, {})
+          program.update(gamestate, truss, dt, {})
 
 
     for screen in gamestate.screens:
@@ -585,21 +587,21 @@ proc update*(gameState: var GameState, dt: float) =
       gameState.screen = screen
 
       if not screen.inProgram or Blocking in gameState.currentProgramFlags(gameState.screen):
-        if KeyCodePageUp.isDownRepeating() and isActiveScreen: # Scrollup
+        if truss.inputs.isDownRepeating(KeycodePageUp) and isActiveScreen: # Scrollup
           gameState.buffer.scrollUp()
 
-        if KeyCodePageDown.isDownRepeating() and isActiveScreen: # Scroll Down
+        if truss.inputs.isDownRepeating(KeycodePageDown) and isActiveScreen: # Scroll Down
           gameState.buffer.scrollDown()
 
         if Blocking notin gameState.currentProgramFlags(gameState.screen):
-          if KeyCodeReturn.isDownRepeating() and isActiveScreen: # Enter
+          if truss.inputs.isDownRepeating(KeyCodeReturn) and isActiveScreen: # Enter
             if gameState.input.suggestion.len > 0:
               gameState.takeSuggestion()
             else:
               gameState.dispatchCommand()
             dirtyInput()
 
-          if KeyCodeUp.isDownRepeating() and isActiveScreen and not KeycodeLAlt.isPressed(): # Up History
+          if truss.inputs.isDownRepeating(KeyCodeUp) and isActiveScreen and not lAltPressed: # Up History
             inc gameState.historyPos
             if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
               gameState.input.str = gameState.history[^gameState.historyPos]
@@ -609,7 +611,7 @@ proc update*(gameState: var GameState, dt: float) =
               gameState.input.pos = gameState.input.str.len
             dirtyInput()
 
-          if KeyCodeDown.isDownRepeating() and isActiveScreen and not KeycodeLAlt.isPressed(): # Down History
+          if truss.inputs.isDownRepeating(KeyCodeDown) and isActiveScreen and not lAltPressed: # Down History
             dec gamestate.historyPos
             if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
               gameState.input.str = gameState.history[^gameState.historyPos]
@@ -639,10 +641,10 @@ proc update*(gameState: var GameState, dt: float) =
             {Draw, TakeInput}
           else:
             {Draw}
-        gameState.activeProgramTrait(screen).update(gamestate, dt, flag)
+        gameState.activeProgramTrait(screen).update(gamestate, truss, dt, flag)
 
       if screen.inProgram and isActiveScreen:
-        if KeyCodeEscape.isDown:
+        if truss.inputs.isDown(KeyCodeEscape):
           gameState.exitProgram()
           gameState.buffer.put ">"
           gamestate.buffer.showCursor(0)
@@ -659,7 +661,7 @@ proc update*(gameState: var GameState, dt: float) =
         discard
       if screen.kind == NoSplit:
         screen.action = Nothing
-        screen.buffer.upload(dt)
+        screen.buffer.upload(dt, truss.windowSize.vec2)
 
   if gameState.screen.shipStack.len > 0 and startShipCount == gameState.screen.shipStack.len:
     gameState.activeShipEntity.shipData.glyphProperties = gameState.buffer.properties

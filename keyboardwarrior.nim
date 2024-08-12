@@ -8,10 +8,9 @@ var
   gameState: GameState
   screenShader: Shader
   rectModel: Model
-  time: float32
   shaderModificationTime: Time
 
-proc init =
+proc init(truss: var Truss) =
   gameState = GameState.init()
 
   var modelData: MeshData[Vec2]
@@ -25,13 +24,13 @@ proc init =
   shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
 
 
-proc draw() =
+proc draw(truss: var Truss) =
   for screen in gameState.screens:
 
     screen.buffer.render()
 
     let
-      scrSize = screenSize().vec2
+      scrSize = truss.windowSize.vec2
       scale = min(scrSize.x / gameState.screenWidth.float32, scrSize.y / gameState.screenHeight.float32)
       sizeX = (scale * screen.w)
       sizeY = (scale * screen.h)
@@ -49,7 +48,7 @@ proc draw() =
         screenShader.setUniform("tex", screen.buffer.getFrameBufferTexture(), required = false)
         screenShader.setUniform("mvp", mat, required = false)
         screenShader.setUniform("fontHeight", screen.buffer.fontSize, required = false)
-        screenShader.setUniform("time", time, required = false)
+        screenShader.setUniform("time", truss.time, required = false)
         screenShader.setUniform("screenSize", scrSize, required = false)
         #screenShader.setUniform("curve", gameState.curveAmount)
         screenShader.setUniform("activeScreen", float32(screen == gameState.screen))
@@ -58,9 +57,8 @@ proc draw() =
 
 
 when not defined(testing):
-  proc update(dt: float32) =
-    gamestate.update(dt)
-    time += dt
+  proc update(truss: var Truss, dt: float32) =
+    gamestate.update(truss,dt)
 
     let currModTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
     if shaderModificationTime < currModTime:
@@ -76,8 +74,8 @@ else:
   template genTest(name: string, dt: float32, body: untyped) =
     glClear(GlColorBufferBit)
     body
-    draw()
-    var img = newImage(screenSize().x, screenSize().y)
+    draw(truss)
+    var img = newImage(truss.windowSize.x, truss.windowSize.y)
 
     glReadPixels(0, 0, img.width, img.height, GlRgba,  GlUnsignedByte, img.data[0].addr)
     img.flipVertical()
@@ -93,90 +91,90 @@ else:
         echo "Error: Failed to match ", name
         errorCode = 1
 
-  proc update(dt: float32) =
+  proc update(truss: var Truss, dt: float32) =
     genTest("console/welcomescreen", 0):
-      gameState.update(0)
+      gameState.update(truss, 0)
 
     genTest("console/username", 0):
-      inputs.inputs.inputText() = "t"
-      gameState.update(0.0)
-      inputs.inputs.inputText() = ""
-      gameState.update(0.0)
+      truss.inputs.inputText() = "t"
+      gameState.update(truss, 0.0)
+      truss.inputs.inputText() = ""
+      gameState.update(truss, 0.0)
 
     genTest("console/loggedin", 0):
-      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0)
-      inputs.inputs.simulateClear(KeyCodeReturn)
+      truss.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(truss, 0)
+      truss.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/sensors", 0):
-      inputs.inputs.inputText() = "sensors"
-      gameState.update(0.0)
-      inputs.inputs.inputText() = ""
-      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeReturn)
+      truss.inputs.inputText() = "sensors"
+      gameState.update(truss, 0.0)
+      truss.inputs.inputText() = ""
+      truss.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/exitprogram", 0):
-      inputs.inputs.simulateDown(KeyCodeEscape)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeEscape)
+      truss.inputs.simulateDown(KeyCodeEscape)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeEscape)
 
     genTest("console/scrollUp", 0):
-      inputs.inputs.simulateDownRepeating(KeycodePageUp)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeycodePageUp)
+      truss.inputs.simulateDownRepeating(KeycodePageUp)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeycodePageUp)
 
     genTest("console/scrollDown", 0):
-      inputs.inputs.simulateDownRepeating(KeycodePageDown)
-      gameState.update(0.0)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeycodePageDown)
+      truss.inputs.simulateDownRepeating(KeycodePageDown)
+      gameState.update(truss, 0.0)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeycodePageDown)
 
     genTest("console/splitv", 0):
-      inputs.inputs.inputText() = "splitv"
-      gameState.update(0.0)
-      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeReturn)
+      truss.inputs.inputText() = "splitv"
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/splith", 0):
-      inputs.inputs.inputText() = "splith"
-      gameState.update(0.0)
-      inputs.inputs.simulateDownRepeating(KeyCodeReturn)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeReturn)
+      truss.inputs.inputText() = "splith"
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateDownRepeating(KeyCodeReturn)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeReturn)
 
     genTest("console/navigateright", 0):
-      inputs.inputs.simulatePressed(KeyCodeLAlt)
-      inputs.inputs.simulateDownRepeating(KeyCodeRight)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeLAlt)
-      inputs.inputs.simulateClear(KeyCodeRight)
-      gameState.update(0.0)
+      truss.inputs.simulatePressed(KeyCodeLAlt)
+      truss.inputs.simulateDownRepeating(KeyCodeRight)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeLAlt)
+      truss.inputs.simulateClear(KeyCodeRight)
+      gameState.update(truss, 0.0)
 
     genTest("console/navigateleft", 0):
-      inputs.inputs.simulatePressed(KeyCodeLAlt)
-      inputs.inputs.simulateDownRepeating(KeyCodeLeft)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeLAlt)
-      inputs.inputs.simulateClear(KeyCodeLeft)
-      gameState.update(0.0)
+      truss.inputs.simulatePressed(KeyCodeLAlt)
+      truss.inputs.simulateDownRepeating(KeyCodeLeft)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeLAlt)
+      truss.inputs.simulateClear(KeyCodeLeft)
+      gameState.update(truss, 0.0)
 
     genTest("console/navigatedown", 0):
-      inputs.inputs.simulatePressed(KeyCodeLAlt)
-      inputs.inputs.simulateDownRepeating(KeyCodeDown)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeLAlt)
-      inputs.inputs.simulateClear(KeyCodeDown)
-      gameState.update(0.0)
+      truss.inputs.simulatePressed(KeyCodeLAlt)
+      truss.inputs.simulateDownRepeating(KeyCodeDown)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeLAlt)
+      truss.inputs.simulateClear(KeyCodeDown)
+      gameState.update(truss, 0.0)
 
     genTest("console/navigateup", 0):
-      inputs.inputs.simulatePressed(KeyCodeLAlt)
-      inputs.inputs.simulateDownRepeating(KeyCodeUp)
-      gameState.update(0.0)
-      inputs.inputs.simulateClear(KeyCodeLAlt)
-      inputs.inputs.simulateClear(KeyCodeUp)
-      gameState.update(0.0)
+      truss.inputs.simulatePressed(KeyCodeLAlt)
+      truss.inputs.simulateDownRepeating(KeyCodeUp)
+      gameState.update(truss, 0.0)
+      truss.inputs.simulateClear(KeyCodeLAlt)
+      truss.inputs.simulateClear(KeyCodeUp)
+      gameState.update(truss, 0.0)
 
     quit errorCode
 
@@ -186,4 +184,6 @@ const flags =
     {}
   else:
     {Resizable}
-initTruss("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
+var truss = Truss.init("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
+while truss.isRunning:
+  truss.update()

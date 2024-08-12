@@ -103,7 +103,7 @@ type
     x*, y*: float32
     velocity*: float32
     maxSpeed*: float32
-    heading: float32
+    heading*: float32
     case kind*: EntityKind
     of Ship, Station:
       shipData*: ShipData
@@ -196,7 +196,7 @@ proc init*(world: var World, playerName, seed: string) =
       heading: heading,
     )
 
-    if ent.kind == Station:
+    if ent.kind in {Station, Asteroid}:
       ent.velocity = 0
       ent.maxSpeed = 0
 
