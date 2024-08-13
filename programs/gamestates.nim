@@ -291,16 +291,10 @@ proc closeScreen(gameState: var Gamestate, screen: Screen) =
 proc focus(gameState: var Gamestate, dir: FocusDirection) =
   gameState.screen = gameState.rootScreen.focus(gameState.screen, dir)
 
-proc init*(_: typedesc[GameState]): GameState =
-  #[
-  result.add Command(
-    name: "toggle3d",
-    help: "This toggles 3D view on and off",
-    handler: proc(gameState: var GameState, _: string) = gamestate.buffer.toggleFrameBuffer()
-  )
-  ]#
+proc addCommands*(gameState: var GameState) =
+  gamestate.handlers.clear()
 
-  result.add Command(
+  gameState.add Command(
     name: "debug",
     help: "Prints lines for debugging the buffer",
     handler: proc(gameState: var GameState, _: string) =
@@ -309,7 +303,9 @@ proc init*(_: typedesc[GameState]): GameState =
         gameState.buffer.newLine()
   )
 
-  result.add Command(
+
+
+  gameState.add Command(
     name: "exit",
     help: "Exits the currently controlled ship.",
     handler: proc(gameState: var GameState, input: string) =
@@ -328,13 +324,13 @@ proc init*(_: typedesc[GameState]): GameState =
         )
   )
 
-  result.add Command(
+  gameState.add Command(
     name: "clear",
     help: "Clears the screen",
     handler: proc(gameState: var GameState, _: string) = gamestate.buffer.toBottom()
   )
 
-  result.add Command(
+  gameState.add Command(
     name: "curve",
     help: "Adjust the curve amount",
     handler: proc(gameState: var GameState, amount: string) =
@@ -352,7 +348,7 @@ proc init*(_: typedesc[GameState]): GameState =
   )
 
 
-  result.add Command(
+  gameState.add Command(
     name: "programs",
     help: "Lists all running programs for the current ship",
     handler: (
@@ -385,7 +381,7 @@ proc init*(_: typedesc[GameState]): GameState =
     ),
   )
 
-  result.add Command(
+  gameState.add Command(
     name: "splitv",
     help: "Splits the current terminal vertically. The left side maintains history",
     handler: proc(gameState: var GameState, _: string) =
@@ -395,7 +391,7 @@ proc init*(_: typedesc[GameState]): GameState =
       gameState.screen.action = SplitV
 
   )
-  result.add Command(
+  gameState.add Command(
     name: "splith",
     help: "Splits the current terminal horizontally. The top side maintains history",
     handler: proc(gameState: var GameState, _: string) =
@@ -406,7 +402,7 @@ proc init*(_: typedesc[GameState]): GameState =
   )
 
 
-  result.add Command(
+  gameState.add Command(
     name: "close",
     help: "Closes the active window if it is not the last opened window.",
     handler: proc(gameState: var GameState, _: string) =
@@ -419,8 +415,9 @@ proc init*(_: typedesc[GameState]): GameState =
   )
 
   for command in programutils.commands():
-    result.add command
+    gameState.add command
 
+proc init*(_: typedesc[GameState]): GameState =
   result.screenWidth = 100
   result.screenHeight = 60
 
@@ -493,7 +490,11 @@ proc currentProgramFlags(gameState: GameState, screen: Screen): ProgramFlags =
   else:
     {}
 
+proc recalculateScreens*(gameState: var GameState) =
+  gameState.rootScreen.recalculate()
+
 proc update*(gameState: var GameState, truss: var Truss, dt: float) =
+
   var dirtiedInput = false
   proc dirtyInput() = dirtiedInput = true
 
@@ -550,6 +551,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
   if truss.inputs.isDownRepeating(KeycodeTab):
     gameState.suggest()
     dirtyInput()
+
 
   if not gamestate.world.isReady:
     gamestate.buffer.setPosition(0, 0)

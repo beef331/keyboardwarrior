@@ -70,11 +70,11 @@ proc recalculate*(screen: Screen) =
       screen.right.y = screen.y + (screen.h / 2) * splitHMod
 
 
-      screen.left.h -= (screen.h / 2) * splitHMod
-      screen.right.h -= (screen.h / 2) * splitHMod
+      screen.left.h = screen.h - (screen.h / 2) * splitHMod
+      screen.right.h = screen.h - (screen.h / 2) * splitHMod
 
-      screen.left.w -= (screen.w / 2) * splitVMod
-      screen.right.w -= (screen.w / 2) * splitVMod
+      screen.left.w = screen.w - (screen.w / 2) * splitVMod
+      screen.right.w = screen.w - (screen.w / 2) * splitVMod
 
       screens.add screen.left
       screens.add screen.right

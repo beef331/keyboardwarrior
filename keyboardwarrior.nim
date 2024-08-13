@@ -3,8 +3,8 @@ import screenutils/screenrenderer
 import programs/[gamestates]
 import pkg/[vmath, pixie, truss3D]
 import pkg/truss3D/[inputs, logging]
-
 import pkg/potato
+
 
 var
   gameState {.persistent.}: GameState
@@ -28,7 +28,6 @@ proc init(truss: var Truss) =
 
 proc draw(truss: var Truss) =
   for screen in gameState.screens:
-
     screen.buffer.render()
 
     let
@@ -188,9 +187,15 @@ const flags =
     {Resizable}
 var truss {.persistent.} = Truss.init("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
 
+
+truss.updateProc = keyboardwarrior.update
+truss.drawProc = keyboardwarrior.draw
+gameState.addCommands()
+gameState.recalculateScreens()
+
 proc potatoMain() {.exportc, dynlib.} =
-  truss.update()
+  if truss.updateProc != nil:
+    truss.update()
   if truss.inputs.isDown(KeyCodeF11):
     potatoCompileIt()
 
-  echo "hello"
