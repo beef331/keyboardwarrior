@@ -231,12 +231,10 @@ proc setFont*(buff: var Buffer, font: Font) =
   buff.recalculateBuffer()
 
 proc setLineWidth*(buff: var Buffer, width: int) =
-  assert buff.mode == Text
   buff.lineWidth = width
   buff.recalculateBuffer()
 
 proc setLineHeight*(buff: var Buffer, height: int) =
-  assert buff.mode == Text
   buff.lineHeight = height
   buff.recalculateBuffer()
 

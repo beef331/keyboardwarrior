@@ -21,7 +21,7 @@ type
     onExit: proc(_: var Atom, gameState: var GameState) {.nimcall.},
     update: proc(_: var Atom, gameState: var GameState, truss: var Truss, dt: float32, active: ProgramFlags) {.nimcall.},
     name: proc(_: Atom): string {.nimcall.},
-    getFlags: proc(_: Atom): set[ProgramFlag] {.nimcall.}
+    getFlags: proc(_: Atom): set[ProgramFlag] {.nimcall.},
   ]
   CommandHandler* = proc(gamestate: var Gamestate, input: string)
 
@@ -645,6 +645,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
             {Draw, TakeInput}
           else:
             {Draw}
+
         gameState.activeProgramTrait(screen).update(gamestate, truss, dt, flag)
 
       if screen.inProgram and isActiveScreen:
@@ -666,6 +667,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
       if screen.kind == NoSplit:
         screen.action = Nothing
         screen.buffer.upload(dt, truss.windowSize.vec2)
+
 
   if gameState.screen.shipStack.len > 0 and startShipCount == gameState.screen.shipStack.len:
     gameState.activeShipEntity.shipData.glyphProperties = gameState.buffer.properties
