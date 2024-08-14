@@ -426,6 +426,7 @@ proc init*(_: typedesc[GameState]): GameState =
   result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
   result.screen = result.rootScreen
   inc result.screenCount
+  result.addCommands()
 
 
 proc clearSuggestion(gameState: var GameState) =

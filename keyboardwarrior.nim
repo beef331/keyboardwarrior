@@ -187,15 +187,18 @@ const flags =
     {Resizable}
 var truss {.persistent.} = Truss.init("Keyboard Warrior", ivec2(1280, 720), keyboardwarrior.init, keyboardwarrior.update, draw, flags = flags, vsync = true)
 
+when defined(hotpotato):
+  truss.updateProc = keyboardwarrior.update
+  truss.drawProc = keyboardwarrior.draw
+  gameState.addCommands()
+  gameState.recalculateScreens()
 
-truss.updateProc = keyboardwarrior.update
-truss.drawProc = keyboardwarrior.draw
-gameState.addCommands()
-gameState.recalculateScreens()
-
-proc potatoMain() {.exportc, dynlib.} =
-  if truss.updateProc != nil:
+  proc potatoMain() {.exportc, dynlib.} =
+    if truss.updateProc != nil:
+      truss.update()
+    if truss.inputs.isDown(KeyCodeF11):
+      potatoCompileIt()
+else:
+  while truss.isRunning:
     truss.update()
-  if truss.inputs.isDown(KeyCodeF11):
-    potatoCompileIt()
 
