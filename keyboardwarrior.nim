@@ -1,9 +1,27 @@
-import std/[times, os]
+import std/[times, os, json]
 import screenutils/screenrenderer
 import programs/[gamestates]
-import pkg/[vmath, pixie, truss3D]
+import pkg/[vmath, pixie, truss3D, traitor]
 import pkg/truss3D/[inputs, logging]
 import pkg/potato
+
+when appType == "lib":
+  proc serialise*(val: Traitor[Program], root: JsonNode): JsonNode =
+    result = newJObject()
+    if val == nil:
+      result.add("id", newJInt(-1))
+    else:
+      result.add("id", newJInt(val.typeId))
+      val.unpackIt:
+        result.add("data", it.data.serialise(root))
+
+  proc deserialise*(val: var Traitor[Program], state: var DeserialiseState, current: JsonNode) =
+    let id = current["id"].getInt()
+    if id >= 0:
+      Program.repackIt(id):
+        var newVal: typeof(It().data)
+        newVal.deserialise(state, current["data"])
+        val = newVal.toTrait(Program)
 
 
 var
@@ -198,6 +216,9 @@ when defined(hotpotato):
       truss.update()
     if truss.inputs.isDown(KeyCodeF11):
       potatoCompileIt()
+
+    if truss.hasInit and not truss.isRunning:
+      potatoQuit()
 else:
   while truss.isRunning:
     truss.update()
