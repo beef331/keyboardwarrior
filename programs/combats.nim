@@ -4,7 +4,11 @@ import std/[strscans, setutils, strbasics]
 import "$projectdir"/data/[spaceentity, insensitivestrings]
 import "$projectdir"/utils/todoer
 
-proc targetHandler(gameState: var GameState, input: string) =
+type
+  Target = object
+  Fire = object
+
+proc handler(_: Target, gameState: var GameState, input: string) =
   if (var (success, bay, target) = input.scanTuple("$s$+ $s$+$."); success):
     target.strip()
     var found = false
@@ -30,7 +34,7 @@ iterator bays(gameState: GameState, hasTarget = false): string =
     if (hasTarget and wbay.weaponTarget != "") or not hasTarget:
       yield string wbay.name
 
-proc targetSuggest(gameState: GameState, input: string, ind: var int): string =
+proc suggest(_: Target, gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
   of 0, 1:
     suggestNext(gameState.bays, input, ind)
@@ -42,15 +46,11 @@ proc targetSuggest(gameState: GameState, input: string, ind: var int): string =
   else:
     ""
 
+proc name(_: Target): string = "target"
+proc help(_: Target): string = "Sets the target of a specific bay."
+proc manual(_: Target): string = ""
 
-command(
-  "target",
-  "Sets the target of a specific weapon.",
-  targetHandler,
-  suggest = targetSuggest
-)
-
-proc fireHandler(gameState: var GameState, input: string) =
+proc handler(_: Fire, gameState: var GameState, input: string) =
   if (var (success, bay) = input.scanTuple("$s$+$."); success):
     bay.strip()
     var found = false
@@ -75,16 +75,16 @@ proc fireHandler(gameState: var GameState, input: string) =
   else:
     gameState.writeError("Expected: 'fire BayName'.")
 
-proc fireSuggest(gameState: GameState, input: string, ind: var int): string =
+proc suggest(_: Fire, gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
   of 0, 1:
     suggestNext(gameState.bays(true), input, ind)
   else:
     ""
 
-command(
-  "fire",
-  "Toggles the fire state of a weapon bay. If active shuts it off.",
-  fireHandler,
-  suggest = fireSuggest
-)
+proc name(_: Fire): string = "fire"
+proc help(_: Fire): string = "Toggles the fire state of a weapon bay. If active shuts it off."
+proc manual(_: Fire): string = ""
+
+storeCommand Target().toTrait(CommandImpl)
+storeCommand Fire().toTrait(CommandImpl)

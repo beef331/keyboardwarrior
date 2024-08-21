@@ -1,6 +1,6 @@
 import ../screenutils/screenrenderer
 import ../data/[spaceentity, insensitivestrings]
-import pkg/[traitor, chroma, pixie, truss3D]
+import pkg/[chroma, pixie, truss3D, traitor]
 import std/[tables, strutils, hashes, random]
 import pkg/truss3D/[inputs]
 import screens
@@ -23,14 +23,14 @@ type
     name: proc(_: Atom): string {.nimcall.},
     getFlags: proc(_: Atom): set[ProgramFlag] {.nimcall.},
   ]
-  CommandHandler* = proc(gamestate: var Gamestate, input: string)
 
-  Command* = object
-    name*: string
-    help*: string
-    manual*: string # Manpage
-    handler*: CommandHandler
-    suggest*: proc(gs: GameState, input: string, ind: var int): string ## Suggests a field that can be entered to fill out
+  CommandImpl* = distinct tuple[
+    name: proc(_: Atom): string {.nimcall.},
+    help: proc(_: Atom): string {.nimcall.},
+    manual: proc(_: Atom): string {.nimcall.},
+    handler:  proc(_: Atom, gamestate: var Gamestate, input: string) {.nimcall.},
+    suggest: proc(_: Atom, gs: GameState, input: string, ind: var int): string {.nimcall.}
+  ]
 
   InputShow = enum
     WithCursor
@@ -42,7 +42,6 @@ type
     screenCount: int
 
     programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
-    handlers: Table[InsensitiveString, Command]
 
     history: seq[string]
     historyPos: int
@@ -59,11 +58,21 @@ type
     lastFpsBuffer: seq[Glyph]
 
     curveAmount*: float32 # The curve amount
+  Command* = Traitor[CommandImpl]
+
 
 implTrait Program
+implTrait CommandImpl
+
+var handlers: Table[InsensitiveString, Command]
+
+iterator activeProgramsByName*(gameState: GameState): lent string =
+  if gameState.screen.shipStack[^1] in gamestate.programs:
+    for k, v in gameState.programs[gameState.screen.shipStack[^1]]:
+      yield string(k)
 
 iterator commands*(gameState: GameState): Command =
-  for command in gamestate.handlers.values:
+  for command in handlers.values:
     yield command
 
 iterator screens*(gameState: var GameState): Screen =
@@ -101,6 +110,11 @@ proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
 proc enterProgram*(gameState: var GameState, program: sink string) =
   gameState.screen.activeProgram = InsensitiveString program
 
+proc enterProgram*(gameState: var GameState, program: InsensitiveString) =
+  if gameState.screen.shipStack[^1] in gameState.programs and program in gameState.programs[gameState.screen.shipStack[^1]]:
+    gameState.screen.activeProgram = program
+  else:
+    gameState.writeError("No program found for active ship named: " & $program)
 
 proc activeProgramTrait(gameState: GameState, screen: Screen): Traitor[Program] =
   if gameState.activeShip in gameState.programs and screen.activeProgram in gameState.programs[gameState.activeShip]:
@@ -118,8 +132,8 @@ proc exitProgram*(gameState: var GameState) =
 proc hasProgram*(gameState: var GameState, name: string): bool =
   gameState.activeShip in gameState.programs and name.InsensitiveString in gameState.programs[gameState.activeShip]
 
-proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.handlers
-proc getCommand*(gameState: var GameState, name: string): lent Command = gameState.handlers[InsensitiveString(name)]
+proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in handlers
+proc getCommand*(gameState: var GameState, name: string): Command = handlers[InsensitiveString(name)]
 
 proc entityExists*(gameState: var GameState, name: string): bool =
   gameState.world.entityExists(name)
@@ -164,16 +178,13 @@ export programutils
 
 import
   helps, combats, eventprinter, hardwarehacksuite, manuals,
-  maps, sensors, shops, statuses, textconfig, locomotion
+  maps, sensors, shops, statuses, textconfig, locomotion, auxiliarycommands
 
 proc insert(s: var string, at: int, toInsert: string) =
   let origEnd = s.high
   s.setLen(s.len + toInsert.len)
   cast[ptr seq[char]](s.addr)[at + toInsert.len..^1] = s.toOpenArray(at, origEnd)
   s[at..at + toInsert.high] = toInsert
-
-proc add*(gameState: var GameState, command: Command) =
-  gameState.handlers[InsensitiveString(command.name)] = command
 
 proc splitVertical(gameState: var GameState, screen: Screen) =
   screen.action = Nothing
@@ -252,170 +263,55 @@ proc splitHorizontal(gameState: var GameState, screen: Screen) =
   gameState.screen = screen.left
   inc gameState.screenCount
 
+
+handlers = block:
+  var res: Table[InsensitiveString, Command]
+  for x in getCommands():
+    res[InsensitiveString x.name()] = x
+  res
+
+
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
-  screen.action = Nothing
-  let
-    theParent = screen.parent
-    theSplit = move screen.parent[]
+  if gameState.screen == gameState.rootScreen:
+    gameState.writeError("You cannot leave your own ship")
+  else:
+    screen.action = Nothing
+    let
+      theParent = screen.parent
+      theSplit = move screen.parent[]
 
 
-  theParent[] =
-    if screen == theSplit.left:
-      move theSplit.right[]
-    elif screen == theSplit.right:
-      move theSplit.left[]
-    else:
-      raiseAssert "Unreachable screen has to be left or right of it's parent"
+    theParent[] =
+      if screen == theSplit.left:
+        move theSplit.right[]
+      elif screen == theSplit.right:
+        move theSplit.left[]
+      else:
+        raiseAssert "Unreachable screen has to be left or right of it's parent"
 
-  if theParent.kind != NoSplit:
-    theParent.left.parent = theParent
-    theParent.right.parent = theParent
+    if theParent.kind != NoSplit:
+      theParent.left.parent = theParent
+      theParent.right.parent = theParent
 
-  theParent.x = theSplit.x
-  theParent.y = theSplit.y
-  theParent.w = theSplit.w
-  theParent.h = theSplit.h
+    theParent.x = theSplit.x
+    theParent.y = theSplit.y
+    theParent.w = theSplit.w
+    theParent.h = theSplit.h
 
-  gameState.screen = theParent
+    gameState.screen = theParent
 
-  theParent.parent = theSplit.parent
+    theParent.parent = theSplit.parent
 
-  if theParent.kind != NoSplit:
-    gameState.screen = theParent.left
+    if theParent.kind != NoSplit:
+      gameState.screen = theParent.left
 
-  theParent.recalculate()
+    theParent.recalculate()
 
-  dec gameState.screenCount
+    dec gameState.screenCount
 
 
 proc focus(gameState: var Gamestate, dir: FocusDirection) =
   gameState.screen = gameState.rootScreen.focus(gameState.screen, dir)
-
-proc addCommands*(gameState: var GameState) =
-  gamestate.handlers.clear()
-
-  gameState.add Command(
-    name: "debug",
-    help: "Prints lines for debugging the buffer",
-    handler: proc(gameState: var GameState, _: string) =
-      for i in 1..gameState.buffer.lineHeight:
-        gameState.buffer.put $i & repeat("=", gameState.buffer.lineWidth)
-        gameState.buffer.newLine()
-  )
-
-
-
-  gameState.add Command(
-    name: "exit",
-    help: "Exits the currently controlled ship.",
-    handler: proc(gameState: var GameState, input: string) =
-      if input == "player":
-        gameState.screen.shipStack.setLen(1)
-      elif gameState.screen.shipStack.len > 1:
-        gameState.buffer.properties = gameState.getEntity(gameState.screen.shipStack[^2]).shipData.glyphProperties
-        gameState.buffer.put("Exited: " & gameState.activeShip & "\n")
-        gameState.screen.shipStack.setLen(gameState.screen.shipStack.high)
-      else:
-        gameState.buffer.put("Where do you want to go,")
-        gameState.buffer.put(" SPACE?\n", GlyphProperties(
-          foreground: gameState.buffer.properties.foreground,
-          background: gameState.buffer.properties.background,
-          shakeStrength: 5, shakeSpeed: 30)
-        )
-  )
-
-  gameState.add Command(
-    name: "clear",
-    help: "Clears the screen",
-    handler: proc(gameState: var GameState, _: string) = gamestate.buffer.toBottom()
-  )
-
-  gameState.add Command(
-    name: "curve",
-    help: "Adjust the curve amount",
-    handler: proc(gameState: var GameState, amount: string) =
-      let amnt =
-        try:
-          parseFloat(amount.strip())
-        except CatchableError as e:
-          gameState.writeError(e.msg)
-          return
-      if amnt notin 0f..1f:
-        gameState.writeError("Expected value in `0..1` range.")
-      else:
-        gameState.curveAmount = amnt
-
-  )
-
-
-  gameState.add Command(
-    name: "programs",
-    help: "Lists all running programs for the current ship",
-    handler: (
-      proc(gameState: var GameState, input: string) =
-        if input.isEmptyOrWhitespace():
-          if gameState.activeShip in gameState.programs:
-            for key in gameState.programs[gameState.activeShip].keys:
-              gameState.buffer.put(key)
-              gameState.buffer.newLine()
-          else:
-            gameState.buffer.put("No programs running on this ship.")
-            gameState.buffer.newLine()
-        else:
-          gameState.screen.activeProgram = InsensitiveString input.strip()
-          if gameState.activeShip notin gameState.programs or gameState.screen.activeProgram notin gameState.programs[gameState.activeShip]:
-            gameState.writeError("No program found named '" & gameState.screen.activeProgram & "' for the present ship.")
-            gameState.screen.activeProgram = InsensitiveString""
-    ),
-    suggest:(
-      proc(gameState: GameState, input: string, ind: var int): string =
-        iterator programsIter(gameState: GameState): string =
-          if gameState.activeShip in gameState.programs:
-            for key in gameState.programs[gameState.activeShip].keys:
-              yield string key
-        case input.suggestIndex()
-        of 0, 1:
-          suggestNext(gameState.programsIter, input, ind)
-        else:
-          ""
-    ),
-  )
-
-  gameState.add Command(
-    name: "splitv",
-    help: "Splits the current terminal vertically. The left side maintains history",
-    handler: proc(gameState: var GameState, _: string) =
-      if gameState.buffer.lineWidth div 2 < 10:
-        gameState.writeError("Cannot make the buffer, width would be too small")
-        return
-      gameState.screen.action = SplitV
-
-  )
-  gameState.add Command(
-    name: "splith",
-    help: "Splits the current terminal horizontally. The top side maintains history",
-    handler: proc(gameState: var GameState, _: string) =
-      if gameState.buffer.lineHeight div 2 < 10:
-        gameState.writeError("Cannot make the buffer, height would be too small")
-        return
-      gameState.screen.action = SplitH
-  )
-
-
-  gameState.add Command(
-    name: "close",
-    help: "Closes the active window if it is not the last opened window.",
-    handler: proc(gameState: var GameState, _: string) =
-      assert gameState.screen.kind == NoSplit
-      if gameState.screen != gameState.rootScreen:
-        gameState.screen.action = Close
-      else:
-        gameState.buffer.put("To quit the game run 'quit really'.\n")
-
-  )
-
-  for command in programutils.commands():
-    gameState.add command
 
 proc init*(_: typedesc[GameState]): GameState =
   result.screenWidth = 100
@@ -426,7 +322,6 @@ proc init*(_: typedesc[GameState]): GameState =
   result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
   result.screen = result.rootScreen
   inc result.screenCount
-  result.addCommands()
 
 
 proc clearSuggestion(gameState: var GameState) =
@@ -453,9 +348,9 @@ proc dispatchCommand(gameState: var GameState) =
           input.high
       command = insStr input[0..ind]
     gameState.buffer.newLine()
-    if command in gamestate.handlers:
+    if command in handlers:
       gameState.clearSuggestion()
-      gamestate.handlers[command].handler(gameState, input[ind + 1 .. input.high])
+      handlers[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command")
 
@@ -471,11 +366,11 @@ proc suggest(gameState: var GameState) =
         else:
           input.high
       command = insStr input[0..ind]
-    if command in gamestate.handlers and gamestate.handlers[command].suggest != nil:
-      gameState.input.suggestion = gamestate.handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
+    if command in handlers:
+      gameState.input.suggestion = handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
   else: # We search top level commands
     iterator handlerStrKeys(gameState: GameState): string =
-      for key in gameState.handlers.keys:
+      for key in handlers.keys:
         yield string key
     gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 

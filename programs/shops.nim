@@ -31,6 +31,8 @@ type
     of false:
       item {.tableSkip.}: InventoryItem
 
+  ShopCommand = object
+
 
 var shopData: seq[ShopEntry]
 
@@ -128,14 +130,15 @@ proc update(shop: var Shop, gameState: var GameState, truss: var Truss, dt: floa
     else:
       discard
 
-proc shopHandler(gameState: var GameState, input: string) =
+proc handler(_: ShopCommand, gameState: var GameState, input: string) =
   if gameState.hasProgram "Shop":
     gameState.enterProgram("Shop")
   else:
     gameState.enterProgram(Shop().toTrait(Program))
 
-command(
-  "shop",
-  "Opens a shop with a seller",
-  shopHandler
-)
+proc name(_: ShopCommand): string = "shop"
+proc help(_: ShopCommand): string = "Opens a shop with a seller"
+proc manual(_: ShopCommand): string = ""
+proc suggest(_: ShopCommand, gameState: GameState, input: string, ind: var int): string = discard
+
+storeCommand ShopCommand().toTrait(CommandImpl)

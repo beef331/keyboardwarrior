@@ -30,6 +30,7 @@ type
     currentChar: int
     errorMsg: string
     hackSpeed: float32 = 1
+  HackCommand = object
 
 proc isInit*(hwHack: HardwareHack): bool = hwHack.target != ""
 
@@ -142,7 +143,7 @@ proc getFlags(_: HardwareHack): ProgramFlags = {}
 
 
 
-proc hhs(gamestate: var GameState, input: string) =
+proc handler(_: HackCommand, gamestate: var GameState, input: string) =
   let
     input = input.strip()
     theName = "hhs" & input
@@ -170,16 +171,15 @@ iterator hackableEntities(gameState: GameState): string =
     if ent.canHack:
       yield ent.name
 
-proc hackSuggest(gameState: GameState, input: string, ind: var int): string =
+proc suggest(_: HackCommand, gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
   of 0, 1:
     suggestNext(gameState.hackableEntities, input, ind)
   else:
     ""
 
-command(
-  "hhs",
-  "This starts a hack on the target.",
-  hhs,
-  suggest = hackSuggest
-)
+proc name(_: HackCommand): string = "hhs"
+proc help(_: HackCommand): string = "This starts a hack on the target."
+proc manual(_: HackCommand): string = ""
+
+storeCommand HackCommand().toTrait(CommandImpl)

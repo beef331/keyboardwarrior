@@ -5,11 +5,13 @@ import ../screenutils/texttables
 
 proc powerFormat(i: int): string = $i & "kw"
 
-type StatusEntry = object
-  name: string
-  powered: bool
-  powerConsumption {.tableStringify(powerFormat).}: int
-  status: string
+type
+  StatusEntry = object
+    name: string
+    powered: bool
+    powerConsumption {.tableStringify(powerFormat).}: int
+    status: string
+  StatusCommand = object
 
 proc status(sys: System): string =
   case sys.kind
@@ -25,7 +27,7 @@ proc status(sys: System): string =
   else:
     ""
 
-proc statusHandler(gameState: var GameState, input: string) =
+proc handler(_: StatusCommand, gameState: var GameState, input: string) =
   var
     entries: seq[StatusEntry]
     props: seq[GlyphProperties]
@@ -67,9 +69,9 @@ proc statusHandler(gameState: var GameState, input: string) =
   )
 
 
+proc name(_: StatusCommand): string = "status"
+proc help(_: StatusCommand): string = "Prints out a cursory status of the ship"
+proc manual(_: StatusCommand): string = ""
+proc suggest(_: StatusCommand, gameState: GameState, input: string, ind: var int): string = discard
 
-command(
-  "status",
-  "Prints out a cursory status of the ship",
-  statusHandler
-)
+storeCommand StatusCommand().toTrait(CommandImpl)

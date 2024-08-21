@@ -2,11 +2,11 @@ import std/[times, os, json]
 import screenutils/screenrenderer
 import programs/[gamestates]
 import pkg/[vmath, pixie, truss3D, traitor]
-import pkg/truss3D/[inputs, logging]
+import pkg/truss3D/[inputs, logging, shaders, textures]
 import pkg/potato
 
 when appType == "lib":
-  proc serialise*(val: Traitor[Program], root: JsonNode): JsonNode =
+  proc serialise*[T](val: var Traitor[T], root: JsonNode): JsonNode =
     result = newJObject()
     if val == nil:
       result.add("id", newJInt(-1))
@@ -15,14 +15,25 @@ when appType == "lib":
       val.unpackIt:
         result.add("data", it.data.serialise(root))
 
-  proc deserialise*(val: var Traitor[Program], state: var DeserialiseState, current: JsonNode) =
+  proc deserialise*[T](val: var Traitor[T], state: var DeserialiseState, current: JsonNode) =
     let id = current["id"].getInt()
     if id >= 0:
-      Program.repackIt(id):
+      T.repackIt(id):
         var newVal: typeof(It().data)
         newVal.deserialise(state, current["data"])
-        val = newVal.toTrait(Program)
+        val = newVal.toTrait(T)
 
+
+
+  proc serialise*(val: var (proc), root: JsonNode): JsonNode = nil
+  proc deserialise*(val: var (proc), state: var DeserialiseState, current: JsonNode) = discard
+
+  proc serialise*[T: Shader | Texture | Ssbo | Truss](val: var T, root: JsonNode): JsonNode =
+    result = potato.serialise(val, root)
+    `=wasMoved`(val)
+
+  proc deserialise*(val: var Shader, state: var DeserialiseState, current: JsonNode) =
+    potato.deserialise(val, state, current)
 
 var
   gameState {.persistent.}: GameState
@@ -208,7 +219,6 @@ var truss {.persistent.} = Truss.init("Keyboard Warrior", ivec2(1280, 720), keyb
 when defined(hotpotato):
   truss.updateProc = keyboardwarrior.update
   truss.drawProc = keyboardwarrior.draw
-  gameState.addCommands()
   gameState.recalculateScreens()
 
   proc potatoMain() {.exportc, dynlib.} =
@@ -222,4 +232,3 @@ when defined(hotpotato):
 else:
   while truss.isRunning:
     truss.update()
-

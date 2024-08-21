@@ -2,6 +2,8 @@
 import gamestates
 import std/[strutils, xmltree, htmlparser, strscans]
 
+type EventPrinter = object
+
 proc printTree(buffer: var Buffer, node: XmlNode, props: var GlyphProperties) =
   let oldProp = props
   if node.kind == xnElement:
@@ -41,7 +43,7 @@ proc displayEvent*(buffer: var Buffer, event: string, isPath = true) =
         field = parseHtmlColor(val)
   buffer.printTree(xml[0], props)
 
-proc eventHandler(gameState: var GameState, str: string) =
+proc handler(_: EventPrinter, gameState: var GameState, str: string) =
   var
     name = ""
     errored = false
@@ -57,8 +59,9 @@ proc eventHandler(gameState: var GameState, str: string) =
     gameState.writeError("Failed to display event.")
 
 
-command(
-  "event",
-  "A debug command that shows events",
-  eventHandler
-)
+proc name(_: EventPrinter): string = "event"
+proc help(_: EventPrinter): string = "A debug command that shows events"
+proc manual(_: EventPrinter): string = ""
+proc suggest(_: EventPrinter, gameState: GameState, input: string, ind: var int): string = discard
+
+storeCommand EventPrinter().toTrait(CommandImpl)

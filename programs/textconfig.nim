@@ -3,8 +3,10 @@ import std/[strscans, strutils]
 import gamestates
 import ../screenutils/screenrenderer
 
+type TextCommand = object
+
 var validNames {.compileTime.}: seq[string]
-proc handleTextChange(gamestate: var GameState, input: string) =
+proc handler(_: TextCommand, gamestate: var GameState, input: string) =
   var toSetField, val: string
   if input.scanf("$s$w$s$+", toSetField, val):
     var foundName = false
@@ -25,7 +27,7 @@ proc handleTextChange(gamestate: var GameState, input: string) =
   else:
     gamestate.writeError("Incorrect command expected `text propertyName value`")
 
-proc textSuggest(gameState: GameState, input: string, ind: var int): string =
+proc suggest(_: TextCommand, gameState: GameState, input: string, ind: var int): string =
   const names = static(validNames)
   case input.suggestIndex()
   of 0, 1:
@@ -33,7 +35,7 @@ proc textSuggest(gameState: GameState, input: string, ind: var int): string =
   else:
     ""
 
-const manual = """
+const manualText = """
 <event>
 <body>
 <p foreground = "#aaaaaa">`text propertyName value`</p>
@@ -80,12 +82,9 @@ Sets the shake movement speed<br/>
 </event>
 """
 
+proc name(_: TextCommand): string = "text"
+proc help(_: TextCommand): string = "This command allows you to change the properties of the terminal text"
+proc manual(_: TextCommand): string = manualText
 
-command(
-  "text",
-  "This command allows you to change the properties of the terminal text",
-  handleTextChange,
-  manual,
-  textSuggest
-)
+storeCommand TextCommand().toTrait(CommandImpl)
 

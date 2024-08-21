@@ -11,6 +11,7 @@ proc formatSpeed(f: float32): string =
 
 type
   Map = object
+  MapCommand = object
 
 proc name(sensor: Map): string = "Map"
 proc onExit(sensor: var Map, gameState: var GameState) = gameState.buffer.mode = Text
@@ -63,14 +64,15 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
         if entry.kind != Projectile:
           gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f, props = color)
 
-proc sensorHandler(gameState: var GameState, input: string) =
+proc handler(_: MapCommand, gameState: var GameState, input: string) =
   if gameState.hasProgram "Map":
     gameState.enterProgram("Map")
   else:
     gameState.enterProgram(Map().toTrait(Program))
 
-command(
-  "map",
-  "Prints out information of nearby ships and points of interest",
-  sensorHandler
-)
+proc name(_: MapCommand): string = "map"
+proc help(_: MapCommand): string = "Shows nearby ships and points of interest"
+proc manual(_: MapCommand): string = ""
+proc suggest(_: MapCommand, gameState: GameState, input: string, ind: var int): string = discard
+
+storeCommand MapCommand().toTrait(CommandImpl)
