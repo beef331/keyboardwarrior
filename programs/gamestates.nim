@@ -180,12 +180,6 @@ import
   helps, combats, eventprinter, hardwarehacksuite, manuals,
   maps, sensors, shops, statuses, textconfig, locomotion, auxiliarycommands
 
-proc insert(s: var string, at: int, toInsert: string) =
-  let origEnd = s.high
-  s.setLen(s.len + toInsert.len)
-  cast[ptr seq[char]](s.addr)[at + toInsert.len..^1] = s.toOpenArray(at, origEnd)
-  s[at..at + toInsert.high] = toInsert
-
 proc splitVertical(gameState: var GameState, screen: Screen) =
   screen.action = Nothing
   screen.buffer.setLineWidth screen.buffer.lineWidth div 2
@@ -411,7 +405,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
       dirtyInput()
 
   if truss.inputs.inputText().len > 0:
-    gameState.input.str.insert gameState.input.pos, truss.inputs.inputText()
+    gameState.input.str.insert truss.inputs.inputText(), gameState.input.pos
     gameState.input.pos.inc truss.inputs.inputText().len
     truss.inputs.setInputText("")
     gameState.clearSuggestion()
