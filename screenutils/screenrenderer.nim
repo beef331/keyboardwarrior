@@ -24,6 +24,8 @@ import pkg/truss3D/[models, shaders, inputs, fontatlaser, instancemodels, textur
 import pkg/[vmath, truss3D, pixie, opensimplexnoise, chroma, opengl]
 import std/[unicode, tables, strutils, enumerate, math]
 from std/os import `/`
+import watchedshaders
+
 export chroma
 
 type
@@ -102,8 +104,8 @@ type
     pixelWidth: int
     atlas: ref FontAtlas
     fontTarget: UiRenderTarget
-    textShader: ref Shader
-    graphicShader: ref Shader
+    textShader: WatchedShader
+    graphicShader: WatchedShader
 
     lines: seq[Line]
     lineHeight*: int
@@ -142,9 +144,9 @@ proc pixelWidth*(buff: Buffer): int = buff.pixelWidth
 
 const
   relativeTextShaderPath {.strDefine.} = ""
-  guiVert = ShaderPath relativeTextShaderPath / "text.vert.glsl"
-  guiFrag = ShaderPath relativeTextShaderPath / "text.frag.glsl"
-  shapeFrag = ShaderPath relativeTextShaderPath / "shape.frag.glsl"
+  guiVert = relativeTextShaderPath / "text.vert.glsl"
+  guiFrag = relativeTextShaderPath / "text.frag.glsl"
+  shapeFrag = relativeTextShaderPath / "shape.frag.glsl"
 
 
 proc recalculateBuffer*(buff: var Buffer) =
@@ -178,8 +180,8 @@ proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, 
 
 
   buff.atlas[] = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
-  buff.textShader[] = loadShader(guiVert, guiFrag)
-  buff.graphicShader[] = loadShader(guiVert, shapeFrag)
+  buff.textShader = loadWatchedShader(guiVert, guiFrag)
+  buff.graphicShader = loadWatchedShader(guiVert, shapeFrag)
   var modelData: MeshData[Vec2]
   modelData.appendVerts [vec2(0, 0), vec2(0, 1), vec2(1, 1), vec2(1, 0)].items
   modelData.append [0u32, 1, 2, 0, 2, 3].items
@@ -468,6 +470,9 @@ proc upload*(buff: var Buffer, dt: float32, screenSize: Vec2) =
     buff.uploadGraphicsMode(screenSize)
 
 proc render*(buff: Buffer) =
+  buff.textShader.reloadIfneeded()
+  buff.graphicShader.reloadIfneeded()
+
   var old: (Glint, Glint, GlSizeI, GlSizeI)
   if buff.useFrameBuffer:
     glGetIntegerv(GlViewPort, old[0].addr)
@@ -480,12 +485,12 @@ proc render*(buff: Buffer) =
 
   case buff.mode
   of Text:
-    buff.textShader[].makeActive()
-    buff.textShader[].setUniform("fontTex", buff.atlas.texture)
+    buff.textShader.makeActive()
+    buff.textShader.setUniform("fontTex", buff.atlas.texture)
 
   of Graphics:
-    buff.graphicShader[].makeActive()
-    buff.graphicShader[].setUniform("fontTex", buff.atlas.texture, false)
+    buff.graphicShader.makeActive()
+    buff.graphicShader.setUniform("fontTex", buff.atlas.texture, false)
 
   glEnable(GlBlend)
   glBlendFunc(GlOne, GlOneMinusSrcAlpha)

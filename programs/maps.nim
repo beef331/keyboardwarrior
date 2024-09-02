@@ -37,6 +37,8 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
       0, 0.3
     )
 
+    let smallestAxis = min(gameState.buffer.pixelWidth, gameState.buffer.pixelHeight)
+
     let sensorRange = gameState.activeShipEntity.sensorRange()
 
     for entry in gameState.world.allInSensors(gameState.activeShip):
@@ -48,7 +50,7 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
       if realDist <= sensorRange.float32:
         let
           offsetPos = vec2(gameState.buffer.pixelWidth.float32 / 2, gameState.buffer.pixelHeight.float32 / 2) +
-            vec2(xDist, yDist).normalize * ((realDist / sensorRange.float32) * gameState.buffer.pixelHeight.float32)
+            vec2(xDist, yDist).normalize * ((realDist / sensorRange.float32) * (smallestAxis.float32 / 2))
           x = offsetPos.x
           y = offsetPos.y
           color =
@@ -63,6 +65,12 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
         gameState.buffer.drawBox(x, y, size, props = color)
         if entry.kind != Projectile:
           gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f, props = color)
+        gameState.buffer.drawCircle(
+          gameState.buffer.pixelWidth / 2,
+          gameState.buffer.pixelHeight / 2,
+          smallestAxis.float32,
+          outline = true
+        )
 
 proc handler(_: MapCommand, gameState: var GameState, input: string) =
   if gameState.hasProgram "Map":

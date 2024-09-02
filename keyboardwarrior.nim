@@ -1,5 +1,5 @@
 import std/[times, os, json]
-import screenutils/screenrenderer
+import screenutils/[screenrenderer, watchedshaders]
 import programs/[gamestates]
 import pkg/[vmath, pixie, truss3D, traitor]
 import pkg/truss3D/[inputs, logging, shaders, textures]
@@ -37,9 +37,8 @@ when appType == "lib":
 
 var
   gameState {.persistent.}: GameState
-  screenShader {.persistent.}: Shader
+  screenShader {.persistent.}: WatchedShader
   rectModel {.persistent.}: Model
-  shaderModificationTime {.persistent.}: Time
 
 proc init(truss: var Truss) =
   gameState = GameState.init()
@@ -51,8 +50,7 @@ proc init(truss: var Truss) =
 
   rectModel = uploadData(modelData)
 
-  screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
-  shaderModificationTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
+  screenShader = loadWatchedShader("vert.glsl", "screen.frag.glsl")
 
 
 proc draw(truss: var Truss) =
@@ -73,7 +71,7 @@ proc draw(truss: var Truss) =
 
     let mat = translate(pos) * scale(vec3(size, 0))
 
-    if screenShader.Gluint > 0:
+    if screenShader.shader.Gluint > 0:
       with screenShader:
         screenShader.setUniform("tex", screen.buffer.getFrameBufferTexture(), required = false)
         screenShader.setUniform("mvp", mat, required = false)
@@ -89,11 +87,7 @@ proc draw(truss: var Truss) =
 when not defined(testing):
   proc update(truss: var Truss, dt: float32) =
     gamestate.update(truss,dt)
-
-    let currModTime = max(getLastModificationTime("vert.glsl"), getLastModificationTime("screen.frag.glsl"))
-    if shaderModificationTime < currModTime:
-      screenShader = loadShader(ShaderPath"vert.glsl", ShaderPath"screen.frag.glsl")
-      shaderModificationTime = currModTime
+    screenShader.reloadIfNeeded()
 else:
   import screenutils/pam
   import pkg/pixie/fileformats/png

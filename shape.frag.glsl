@@ -75,7 +75,8 @@ void main() {
       frag_color = fg * float(circle(fUv - 0.5, 0.5) <= 0);
       break;
     case 4: // Outlined Ellipse
-      frag_color = fg * float(abs(circle(fUv - 0.5, 0.48)) < 0.01);
+      float circ = circle(fUv - 0.5, 0.5);
+      frag_color = fg * float(circ < 0 && circ > -0.004);
       break;
     default:
       frag_color = vec4(kind / 7, 0, 0, 1);
