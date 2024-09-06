@@ -4,15 +4,20 @@ import quadtrees
 import insensitivestrings
 
 type
-  InventoryItem* = object
-    name*: string
-    count*: int
-    cost*: int
+  InventoryKind = enum
+    Ore
+    ShipComponent
+    Ammo
+    Food
+
+  InventoryEntry = ref object
+    kind*: InventoryKind
+    name*: InsensitiveString
     weight*: int
 
-  Compartment* = object
-    inventory*: seq[InventoryItem]
-    maxLoad*: int
+  InventoryItem* = object
+    entry*: InventoryEntry # Do not need to copy this part
+    amount*: int
 
   EntityKind* = enum
     Asteroid
@@ -39,7 +44,7 @@ type
     AutoLoader
     AutoTargetting
     Hacker
-    Room
+    Inventory
     Generator ## Generates power
 
   WeaponKind* = enum
@@ -74,6 +79,7 @@ type
       currentAmmo*: int
     of ToolBay:
       toolTarget*: string # Use node id instead?
+      toolRange*: int
     of Shield, Nanites:
       currentShield*, maxShield*: int
       regenRate*: int
@@ -87,8 +93,9 @@ type
     of Hacker:
       hackSpeed*: int
       hackRange*: int
-    of Room:
-      inventory*: Compartment
+    of Inventory:
+      inventory: Table[InsensitiveString, InventoryItem]
+      maxWeight: int # Exceeding this causes the ship to slow down
     of Generator:
       discard
 
@@ -123,8 +130,14 @@ type
     seed: int # Start seed to allow reloading state from chunks
     randState*: Rand
     activeChunk: Chunk
+    inventoryItems: Table[InsensitiveString, InventoryEntry] # We do not want to remake InventoryItems so they're the same off reference
 
   NotSystem* = distinct set[SystemKind]
+
+proc currentWeight*(system: System): int =
+  assert system.kind == Inventory
+  for x in system.inventory.values:
+    result += x.entry.weight * x.amount
 
 proc canHack*(spaceEntity: SpaceEntity): bool =
   if spaceEntity.kind in {Ship, Station}:
@@ -134,6 +147,23 @@ proc canHack*(spaceEntity: SpaceEntity): bool =
 
 proc isReady*(world: World): bool = world.playerName.len != 0
 
+proc add*(world: var World, item: InventoryEntry) =
+  world.inventoryItems[item.name] = item
+
+proc getEntry*(world: World, name: InsensitiveString): InventoryEntry =
+  world.inventoryItems[name]
+
+proc getItems*(world: World, filter: set[InventoryKind]): seq[InventoryEntry] =
+  for value in world.inventoryItems.values:
+    if value.kind in filter:
+      result.add value
+
+proc makeOres(world: var World) =
+  world.add InventoryEntry(kind: Ore, name: insStr"Iron Ore", weight: 10)
+  world.add InventoryEntry(kind: Ore, name: insStr"Lithium Ore", weight: 2)
+  world.add InventoryEntry(kind: Ore, name: insStr"Aluminium Ore", weight: 4)
+  world.add InventoryEntry(kind: Ore, name: insStr"Lead Ore", weight: 12)
+
 proc init*(world: var World, playerName, seed: string) =
   world.playerName = playerName
   if seed.len > 0:
@@ -142,6 +172,9 @@ proc init*(world: var World, playerName, seed: string) =
     var val: array[8, byte]
     assert urandom(val)
     copyMem(world.seed.addr, val.addr, sizeof(int))
+  world.makeOres()
+
+  let ores = world.getItems {Ore}
 
   world.randState = initRand(world.seed)
   var qt = QuadTree[SpaceEntity].init(1000, 1000)
@@ -159,7 +192,9 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50, powerUsage: 100),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
             System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
-            System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100)
+            System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100),
+            System(name: insStr"Drill1", kind: ToolBay, interactionDelay: 0.7f, toolRange: 4),
+            System(name: insStr"BasicStorage", kind: Inventory, maxWeight: 1000),
           ]
         )
     )
@@ -196,9 +231,20 @@ proc init*(world: var World, playerName, seed: string) =
       heading: heading,
     )
 
+
     if ent.kind in {Station, Asteroid}:
       ent.velocity = 0
       ent.maxSpeed = 0
+
+    if ent.kind == Asteroid:
+      var selectable = {0u8..ores.high.uint8}
+      let oreAmount = world.randState.rand(1 .. ores.high)
+      for _ in 0..<oreAmount:
+        let
+          ind = world.randState.sample(selectable)
+          amount = world.randState.rand(20..100)
+        selectable.excl ind
+        ent.resources.add InventoryItem(entry: ores[ind], amount: amount)
 
     if ent.kind in {Ship, Station}:
       let powered =
@@ -217,6 +263,7 @@ proc init*(world: var World, playerName, seed: string) =
           System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
         ]
       )
+
 
     world.activeChunk.nameToEntityInd[insStr name] = world.activeChunk.entities.add ent
 
@@ -382,6 +429,39 @@ proc fireWeapon(world: var World, ent: SpaceEntity, sys: var System, dt: float32
     sys.interactionTime = sys.interactionDelay
 
 
+proc toolTick(world: var World, ent: var SpaceEntity, sys: var System, dt: float32) =
+  assert Powered in sys.flags
+  assert Toggled in sys.flags
+  assert sys.kind == ToolBay
+
+  let
+    target = world.getEntity sys.toolTarget
+    distX = ent.x - target.x
+    distY = ent.y - target.y
+
+  if target.kind != Asteroid or sqrt(distX * distX + distY * distY).int > sys.toolRange:
+    sys.flags.excl Toggled
+    return
+
+  sys.interactionTime -= dt
+  if sys.interactionTime <= 0:
+    for i, x in target.resources.pairs:
+      var amount = min(world.randState.rand(1..10), x.amount)
+      world.getEntity(sys.toolTarget).resources[i].amount -= amount
+      for inventory in ent.poweredSystemsOf({Inventory}):
+        if inventory.currentWeight < inventory.maxWeight:
+          let amountToDeposit = min(inventory.maxWeight - inventory.currentWeight div x.entry.weight, amount)
+          if x.entry.name in inventory.inventory:
+            inventory.inventory[x.entry.name].amount += amountToDeposit
+          else:
+            var toDeposit = x
+            toDeposit.amount = amountToDeposit
+            inventory.inventory[x.entry.name] = toDeposit
+
+    sys.interactionTime = sys.interactionDelay
+
+
+
 
 
 proc update*(world: var World, dt: float32) =
@@ -392,9 +472,13 @@ proc update*(world: var World, dt: float32) =
     entity.x += dt * entity.velocity * xOffset
     entity.y += dt * entity.velocity * yOffset
     if entity.kind == Ship:
-      for system in entity.poweredSystemsOf({WeaponBay}):
+      for system in entity.poweredSystemsOf({WeaponBay, ToolBay}):
         if Toggled in system.flags:
-          fireWeapon(world, entity, system, dt)
+          case system.kind
+          of WeaponBay:
+            fireWeapon(world, entity, system, dt)
+          else:
+            toolTick(world, entity, system, dt)
 
 
 
