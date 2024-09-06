@@ -115,7 +115,7 @@ type
     of Ship, Station:
       shipData*: ShipData
     of Asteroid:
-      resources: seq[InventoryItem]
+      resources*: seq[InventoryItem]
     of Projectile:
       projKind: WeaponKind
 
@@ -144,6 +144,14 @@ proc canHack*(spaceEntity: SpaceEntity): bool =
     for sys in spaceEntity.shipData.systems:
       if sys.kind == Hacker and Powered in sys.flags:
         return true
+
+proc weight*(spaceEntity: SpaceEntity): int =
+  case spaceEntity.kind
+  of Asteroid:
+    for x in spaceEntity.resources:
+      result += x.entry.weight * x.amount
+  else:
+    assert false, "Unimplemented weight for: " & $spaceEntity.kind
 
 proc isReady*(world: World): bool = world.playerName.len != 0
 
@@ -193,7 +201,7 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
             System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
             System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100),
-            System(name: insStr"Drill1", kind: ToolBay, interactionDelay: 0.7f, toolRange: 4),
+            System(name: insStr"Drill1", kind: ToolBay, interactionDelay: 1f, toolRange: 10),
             System(name: insStr"BasicStorage", kind: Inventory, maxWeight: 1000),
           ]
         )

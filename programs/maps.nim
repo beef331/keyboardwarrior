@@ -61,8 +61,11 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
             else:
               gameState.buffer.properties
           size = 3f + 9f * float32(entry.kind != Projectile) + (float32(entry.kind == Station) * 4)
-
-        gameState.buffer.drawBox(x, y, size, props = color)
+        case entry.kind
+        of Asteroid:
+          gameState.buffer.drawCircle(x, y, 1 + entry.weight / 10, props = color)
+        else:
+          gameState.buffer.drawBox(x, y, size, props = color)
         if entry.kind != Projectile:
           gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f, props = color)
         gameState.buffer.drawCircle(

@@ -18,7 +18,11 @@ proc handler(_: Target, gameState: var GameState, input: string) =
         if not gameState.world.entityExists(target):
           gameState.writeError("No target named: '" & target & "'.")
         else:
-          sys.weaponTarget = target
+          if sys.kind == ToolBay:
+            sys.toolTarget = target
+            sys.flags.incl Toggled
+          else:
+            sys.weaponTarget = target
         break
 
 

@@ -178,7 +178,8 @@ export programutils
 
 import
   helps, combats, eventprinter, hardwarehacksuite, manuals,
-  maps, sensors, shops, statuses, textconfig, locomotion, auxiliarycommands
+  maps, sensors, shops, statuses, textconfig, locomotion, auxiliarycommands,
+  scanner
 
 proc splitVertical(gameState: var GameState, screen: Screen) =
   screen.action = Nothing
