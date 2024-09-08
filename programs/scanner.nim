@@ -6,7 +6,7 @@ import "$projectdir"/data/[spaceentity, insensitivestrings]
 type Scanner = object
 
 proc name(_: Scanner): string = "scanner"
-proc help(_: Scanner): string = "Scans nearby ships, asteroids and stations"
+proc help(_: Scanner): string = "Scans nearby ships, asteroids, stations, and ore processors"
 proc manual(_: Scanner): string = ""
 proc handler(_: Scanner, gameState: var GameState, input: string) =
   let input = InsensitiveString input.strip()
@@ -22,6 +22,13 @@ proc handler(_: Scanner, gameState: var GameState, input: string) =
         gameState.buffer.put " - Weight: "
         gameState.buffer.put $(x.amount * x.entry.weight)
         gameState.buffer.newLine()
+    of OreProcessor:
+      for (cost, entry) in ent.smeltOptions.items:
+        gameState.buffer.put "$"
+        gameState.buffer.put $cost
+        gameState.buffer.put " per "
+        gameState.buffer.put entry.name
+        gamestate.buffer.newLine()
     else:
       discard
   else:

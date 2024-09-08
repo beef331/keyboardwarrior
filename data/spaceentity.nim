@@ -4,8 +4,13 @@ import quadtrees
 import insensitivestrings
 
 type
+  ItemOperation = enum
+    Smelt
+    Upgrade
+
   InventoryKind = enum
     Ore
+    Ingot
     ShipComponent
     Ammo
     Food
@@ -14,6 +19,8 @@ type
     kind*: InventoryKind
     name*: InsensitiveString
     weight*: int
+    operationResult*: array[ItemOperation, InventoryEntry] # What item do we get for this operation
+    operationCount*: array[ItemOperation, int] # How many do we get for this operation
 
   InventoryItem* = object
     entry*: InventoryEntry # Do not need to copy this part
@@ -24,6 +31,7 @@ type
     Projectile
     Ship
     Station
+    OreProcessor = "Ore-Processor"
 
   Faction* = enum
     Universe
@@ -116,6 +124,8 @@ type
       shipData*: ShipData
     of Asteroid:
       resources*: seq[InventoryItem]
+    of OreProcessor:
+      smeltOptions*: seq[(int, InventoryEntry)]
     of Projectile:
       projKind: WeaponKind
 
@@ -155,8 +165,9 @@ proc weight*(spaceEntity: SpaceEntity): int =
 
 proc isReady*(world: World): bool = world.playerName.len != 0
 
-proc add*(world: var World, item: InventoryEntry) =
+proc add*(world: var World, item: InventoryEntry): InventoryEntry {.discardable.} =
   world.inventoryItems[item.name] = item
+  item
 
 proc getEntry*(world: World, name: InsensitiveString): InventoryEntry =
   world.inventoryItems[name]
@@ -167,10 +178,37 @@ proc getItems*(world: World, filter: set[InventoryKind]): seq[InventoryEntry] =
       result.add value
 
 proc makeOres(world: var World) =
-  world.add InventoryEntry(kind: Ore, name: insStr"Iron Ore", weight: 10)
-  world.add InventoryEntry(kind: Ore, name: insStr"Lithium Ore", weight: 2)
-  world.add InventoryEntry(kind: Ore, name: insStr"Aluminium Ore", weight: 4)
-  world.add InventoryEntry(kind: Ore, name: insStr"Lead Ore", weight: 12)
+  world.add InventoryEntry(
+    kind: Ore,
+    name: insStr"Iron Ore",
+    weight: 10,
+    operationResult: [world.add(InventoryEntry(kind: Ingot, weight: 13, name: insStr"Iron Ingot")), nil],
+    operationCount: [1, 0]
+
+  )
+  world.add InventoryEntry(
+    kind: Ore,
+    name: insStr"Lithium Ore",
+    weight: 2,
+    operationResult: [world.add(InventoryEntry(kind: Ingot, weight: 3, name: insStr"Lithium Ingot")), nil],
+    operationCount: [1, 0]
+  )
+
+  world.add InventoryEntry(
+    kind: Ore,
+    name: insStr"Aluminium Ore",
+    weight: 4,
+    operationResult: [world.add(InventoryEntry(kind: Ingot, weight: 5, name: insStr"Aluminium Ingot")), nil],
+    operationCount: [1, 0]
+  )
+
+  world.add InventoryEntry(
+    kind: Ore,
+    name: insStr"Lead Ore",
+    weight: 12,
+    operationResult: [world.add(InventoryEntry(kind: Ingot, weight: 16, name: insStr"Lead Ingot")), nil],
+    operationCount: [1, 0]
+  )
 
 proc init*(world: var World, playerName, seed: string) =
   world.playerName = playerName
@@ -208,12 +246,10 @@ proc init*(world: var World, playerName, seed: string) =
     )
   world.activeChunk = Chunk(entities: qt, nameToEntityInd: {insStr playerName: world.player}.toTable())
 
-  const entityNames = ["Freighter", "Asteroid", "Station", "Carrier", "Hauler", "Unknown"]
-
   for _ in 0..1000:
     let
-      selectedName = world.randState.sample(entityNames)
-      name = selectedName & $world.activeChunk.nameCount.getOrDefault(insStr selectedName)
+      kind = world.randState.sample({EntityKind.low .. EntityKind.high} - {Projectile})
+      name = $kind & $world.activeChunk.nameCount.getOrDefault(insStr $kind)
       x = world.randState.rand(100d..900d)
       y =  world.randState.rand(100d..900d)
       vel =  world.randState.rand(0.5d..1d)
@@ -221,15 +257,7 @@ proc init*(world: var World, playerName, seed: string) =
       heading = world.randState.rand(0d..Tau)
 
     var ent = SpaceEntity(
-      kind:(
-        case selectedName
-        of entityNames[1]:
-          Asteroid
-        of entityNames[2]:
-          Station
-        else:
-          Ship
-      ),
+      kind: kind,
       name: name,
       x: x,
       y: y,
@@ -240,11 +268,12 @@ proc init*(world: var World, playerName, seed: string) =
     )
 
 
-    if ent.kind in {Station, Asteroid}:
+    if kind in {Station, Asteroid, OreProcessor}:
       ent.velocity = 0
       ent.maxSpeed = 0
 
-    if ent.kind == Asteroid:
+    case kind
+    of Asteroid:
       var selectable = {0u8..ores.high.uint8}
       let oreAmount = world.randState.rand(1 .. ores.high)
       for _ in 0..<oreAmount:
@@ -254,7 +283,7 @@ proc init*(world: var World, playerName, seed: string) =
         selectable.excl ind
         ent.resources.add InventoryItem(entry: ores[ind], amount: amount)
 
-    if ent.kind in {Ship, Station}:
+    of Ship, Station:
       let powered =
         if world.randState.rand(0..100) > 20:
           {Powered}
@@ -271,13 +300,21 @@ proc init*(world: var World, playerName, seed: string) =
           System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
         ]
       )
+    of OreProcessor:
+      var selectable = {0u8..ores.high.uint8}
+      let oreAmount = world.randState.rand(1 .. ores.high)
+      for _ in 0..<oreAmount:
+        let
+          ind = world.randState.sample(selectable)
+          cost = world.randState.rand(1..4)
+        selectable.excl ind
+        ent.smeltOptions.add (cost, ores[ind])
+    of Projectile:
+      discard
 
 
     world.activeChunk.nameToEntityInd[insStr name] = world.activeChunk.entities.add ent
-
-
-
-    inc world.activeChunk.nameCount, insStr selectedName
+    inc world.activeChunk.nameCount, insStr $kind
 
 
 proc player*(world: World): lent SpaceEntity =

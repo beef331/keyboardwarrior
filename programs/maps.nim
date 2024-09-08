@@ -11,14 +11,22 @@ proc formatSpeed(f: float32): string =
 
 type
   Map = object
+    zoom: float32 = 1f32
   MapCommand = object
 
 proc name(sensor: Map): string = "Map"
 proc onExit(sensor: var Map, gameState: var GameState) = gameState.buffer.mode = Text
 proc getFlags(_: Map): ProgramFlags = {}
 
-proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
+proc update(map: var Map, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if Draw in flags:
+    if TakeInput in flags:
+      if truss.inputs.isPressed(KeyCodeUp):
+        map.zoom = max(map.zoom - 1 * dt, 1)
+      elif truss.inputs.isPressed(KeyCodeDown):
+        map.zoom = min(map.zoom + 1 * dt, 10)
+
+    let zoom = 10 / map.zoom
     gameState.buffer.clearShapes()
     gamestate.buffer.mode = Graphics
     let player = gameState.activeShipEntity
@@ -26,7 +34,7 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
     gameState.buffer.drawBox(
       gameState.buffer.pixelWidth.float32 / 2,
       gameState.buffer.pixelHeight.float32 / 2,
-      10,
+      10 * zoom,
       props = GlyphProperties(foreground: parseHtmlColor"yellow", blinkSpeed: 3f)
     )
 
@@ -34,7 +42,7 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
       "You",
       gameState.buffer.pixelWidth / 2,
       gameState.buffer.pixelHeight / 2 + 10,
-      0, 0.3
+      0, 0.3 * zoom
     )
 
     let smallestAxis = min(gameState.buffer.pixelWidth, gameState.buffer.pixelHeight)
@@ -46,8 +54,8 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
       let
         xDist = entry.x - player.x
         yDist = entry.y - player.y
-        realDist = sqrt(xDist * xDist + yDist * yDist)
-      if realDist <= sensorRange.float32:
+        realDist = sqrt(xDist * xDist + yDist * yDist) * zoom
+      if realDist <= sensorRange.float32 * zoom:
         let
           offsetPos = vec2(gameState.buffer.pixelWidth.float32 / 2, gameState.buffer.pixelHeight.float32 / 2) +
             vec2(xDist, yDist).normalize * ((realDist / sensorRange.float32) * (smallestAxis.float32 / 2))
@@ -63,15 +71,15 @@ proc update(sensor: var Map, gameState: var GameState, truss: var Truss, dt: flo
           size = 3f + 9f * float32(entry.kind != Projectile) + (float32(entry.kind == Station) * 4)
         case entry.kind
         of Asteroid:
-          gameState.buffer.drawCircle(x, y, 1 + entry.weight / 10, props = color)
+          gameState.buffer.drawCircle(x, y, (1 + entry.weight / 10) * zoom, props = color)
         else:
-          gameState.buffer.drawBox(x, y, size, props = color)
+          gameState.buffer.drawBox(x, y, size * zoom, props = color)
         if entry.kind != Projectile:
-          gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f, props = color)
+          gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f * zoom, props = color)
         gameState.buffer.drawCircle(
           gameState.buffer.pixelWidth / 2,
           gameState.buffer.pixelHeight / 2,
-          smallestAxis.float32,
+          smallestAxis.float32 * zoom,
           outline = true
         )
 
