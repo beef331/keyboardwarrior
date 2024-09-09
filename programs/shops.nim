@@ -1,6 +1,6 @@
 {.used.}
 import gamestates
-import ../data/spaceentity
+import ../data/[spaceentity, inventories]
 import ../screenutils/[texttables, boxes]
 import pkg/truss3D/inputs
 import std/[random, strutils]
