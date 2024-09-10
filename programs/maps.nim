@@ -9,6 +9,10 @@ import pkg/truss3D
 proc formatSpeed(f: float32): string =
   formatFloat(f, ffDecimal, precision = 2)
 
+const
+  maxZoom = 6f
+  zoomSpeed = 3f
+
 type
   Map = object
     zoom: float32 = 1f32
@@ -21,12 +25,15 @@ proc getFlags(_: Map): ProgramFlags = {}
 proc update(map: var Map, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if Draw in flags:
     if TakeInput in flags:
-      if truss.inputs.isPressed(KeyCodeUp):
-        map.zoom = max(map.zoom - 1 * dt, 1)
-      elif truss.inputs.isPressed(KeyCodeDown):
-        map.zoom = min(map.zoom + 1 * dt, 10)
+      if truss.inputs.isPressed(KeyCodeLShift) or
+        truss.inputs.isPressed(KeyCodeRShift):
+        if truss.inputs.isPressed(KeyCodeUp):
+          map.zoom -= dt * zoomSpeed
+        elif truss.inputs.isPressed(KeyCodeDown):
+          map.zoom += dt * zoomSpeed
+      map.zoom = clamp(map.zoom, 1, maxZoom)
 
-    let zoom = 10 / map.zoom
+    let zoom = maxZoom / map.zoom
     gameState.buffer.clearShapes()
     gamestate.buffer.mode = Graphics
     let player = gameState.activeShipEntity
@@ -41,7 +48,7 @@ proc update(map: var Map, gameState: var GameState, truss: var Truss, dt: float3
     gameState.buffer.drawText(
       "You",
       gameState.buffer.pixelWidth / 2,
-      gameState.buffer.pixelHeight / 2 + 10,
+      gameState.buffer.pixelHeight / 2 + 10 * zoom,
       0, 0.3 * zoom
     )
 
@@ -75,7 +82,12 @@ proc update(map: var Map, gameState: var GameState, truss: var Truss, dt: float3
         else:
           gameState.buffer.drawBox(x, y, size * zoom, props = color)
         if entry.kind != Projectile:
-          gameState.buffer.drawText(entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2), x, y + size, 0, scale = 0.3f * zoom, props = color)
+          gameState.buffer.drawText(
+            entry.name & " " & abs(min(xDist, yDist)).formatFloat(ffDecimal, precision = 2),
+            x, y + size * zoom, 0,
+            scale = 0.3f * zoom,
+            props = color
+          )
         gameState.buffer.drawCircle(
           gameState.buffer.pixelWidth / 2,
           gameState.buffer.pixelHeight / 2,
