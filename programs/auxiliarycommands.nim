@@ -36,7 +36,7 @@ proc handler(_: ExitCommand, gameState: var GameState, input: string) =
     gameState.screen.shipStack.setLen(1)
   elif gameState.screen.shipStack.len > 1:
     gameState.buffer.properties = gameState.getEntity(gameState.screen.shipStack[^2]).shipData.glyphProperties
-    gameState.buffer.put("Exited: " & gameState.activeShip & "\n")
+    gameState.buffer.put("Exited: " & gameState.activeShipEntity.name & "\n")
     gameState.screen.shipStack.setLen(gameState.screen.shipStack.high)
   else:
     gameState.buffer.put("Where do you want to go,")

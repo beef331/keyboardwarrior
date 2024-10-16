@@ -1,5 +1,5 @@
 import ../screenutils/screenrenderer
-import ../data/[spaceentity, insensitivestrings]
+import ../data/[spaceentity, insensitivestrings, worlds]
 
 type
   TextInput* = object
@@ -31,7 +31,7 @@ type
       input*: TextInput
       programX*: int
       programY*: int
-      shipStack*: seq[string] ## Stack of names for which ship is presently controlled
+      shipStack*: seq[ControlledEntity] ## Stack for which ship is presently controlled
         ## [^1] is active
         ## [0] is the player's
       action*: ScreenAction

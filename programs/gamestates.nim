@@ -1,5 +1,5 @@
 import ../screenutils/screenrenderer
-import ../data/[spaceentity, insensitivestrings]
+import ../data/[spaceentity, insensitivestrings, worlds]
 import pkg/[chroma, pixie, truss3D, traitor]
 import std/[tables, strutils, hashes, random]
 import pkg/truss3D/[inputs]
@@ -41,7 +41,7 @@ type
     screen*: Screen
     screenCount: int
 
-    programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
+    programs: Table[ControlledEntity, Table[InsensitiveString, Traitor[Program]]]
 
     history: seq[string]
     historyPos: int
@@ -67,8 +67,9 @@ implTrait CommandImpl
 var handlers: Table[InsensitiveString, Command]
 
 iterator activeProgramsByName*(gameState: GameState): lent string =
-  if gameState.screen.shipStack[^1] in gamestate.programs:
-    for k, v in gameState.programs[gameState.screen.shipStack[^1]]:
+  let controlledEnt = gameState.screen.shipStack[^1]
+  if controlledEnt in gamestate.programs:
+    for k, v in gameState.programs[controlledEnt]:
       yield string(k)
 
 iterator commands*(gameState: GameState): Command =
@@ -89,8 +90,8 @@ proc writeError*(gameState: var GameState, msg: string) =
   gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
   gameState.buffer.newLine()
 
-proc activeShip*(gameState: GameState): lent string =
-  gameState.screen.shipStack[gameState.screen.shipStack.high]
+proc activeShip*(gameState: GameState): ControlledEntity =
+  gameState.screen.shipStack[^1]
 
 proc activeShipEntity*(gameState: GameState): lent SpaceEntity =
   gameState.world.getEntity(gameState.activeShip)
@@ -136,19 +137,29 @@ proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveStri
 proc getCommand*(gameState: var GameState, name: string): Command = handlers[InsensitiveString(name)]
 
 proc entityExists*(gameState: var GameState, name: string): bool =
-  gameState.world.entityExists(name)
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.entityExists(loc, name)
+
+proc getEntity*(gameState: GameState, entity: ControlledEntity): lent SpaceEntity =
+  gameState.world.getEntity(entity)
+
+proc getEntity*(gameState: var GameState, entity: ControlledEntity): var SpaceEntity =
+  gameState.world.getEntity(entity)
 
 proc getEntity*(gameState: GameState, name: string): lent SpaceEntity =
-  gameState.world.getEntity(name)
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.getEntity(loc, name)
 
 proc getEntity*(gameState: var GameState, name: string): var SpaceEntity =
-  gameState.world.getEntity(name)
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.getEntity(loc, name)
 
 proc takeControlOf*(gameState: var GameState, name: string): bool =
   ## takes control of a ship returning true if it can be found and connected to
-  result = gameState.world.entityExists(name) and name != gameState.screen.shipStack[^1] # O(N) Send help!
+  let loc = gamestate.screen.shipStack[^1].location
+  result = gameState.world.entityExists(loc, name) and name != gamestate.activeShipEntity.name # O(N) Send help!
   if result:
-    gameState.screen.shipStack.add name
+    gameState.screen.shipStack.add ControlledEntity(location: loc, entryId: gamestate.world.getEntityId(loc, name))
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
 proc randState*(gameState: var GameState): var Rand = gameState.world.randState
@@ -177,9 +188,7 @@ import programutils
 export programutils
 
 import
-  helps, combats, eventprinter, hardwarehacksuite, manuals,
-  maps, sensors, shops, statuses, textconfig, locomotion, auxiliarycommands,
-  scanner
+  helps, eventprinter, manuals, shops, statuses, textconfig, auxiliarycommands
 
 proc splitVertical(gameState: var GameState, screen: Screen) =
   screen.action = Nothing
@@ -440,6 +449,8 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
 
   if truss.inputs.isDownRepeating(KeycodeTab):
+    if truss.inputs.isPressed(KeyCodeLShift) or truss.inputs.isPressed(KeyCodeRShift):
+      dec gameState.input.suggestionInd, 2
     gameState.suggest()
     dirtyInput()
 
@@ -453,7 +464,8 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
     if truss.inputs.isDownRepeating(KeycodeReturn)and gameState.input.str.len > 0:
       let name = gameState.popInput()
-      gameState.screen.shipStack.add name
+      let loc = gamestate.activeShipEntity.location
+      gameState.screen.shipStack.add ControlledEntity(location: loc, entryId: gamestate.world.getEntityId(loc, name))
       gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
       gameState.buffer.put ShellCarrot
