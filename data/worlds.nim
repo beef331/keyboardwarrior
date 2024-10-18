@@ -1,4 +1,5 @@
 import spaceentity, insensitivestrings, inventories
+import "$projectdir"/screenutils/screenrenderer
 import std/[options, tables, setutils, random, sysrand, hashes]
 
 type
@@ -14,6 +15,7 @@ type
     entryId*: int
 
   World* = object
+    idCounter: LocationId
     locations: seq[Location] # 0th location is always 0, 0
     nameToLocation: Table[InsensitiveString, LocationId] # So we can O(1) find from user input, consider `pathto kronos` which finds the shortest path through non hostile space
     playerName: string # GUID no other ship can use this
@@ -21,6 +23,15 @@ type
     randState*: Rand
     inventoryItems: Table[InsensitiveString, InventoryEntry] # We do not want to remake InventoryItems so they're the same off reference
 
+
+proc nextLocationID(world: var World): LocationId =
+  result = world.idCounter
+  inc world.idCounter.int
+
+proc add*(location: var Location, ent: sink SpaceEntity) =
+  ent.location = location.id
+  ent.locationIndex = location.entities.len
+  location.entities.add ent
 
 
 proc isReady*(world: World): bool = world.playerName.len != 0
@@ -80,7 +91,46 @@ proc init*(world: var World, playerName, seed: string) =
     copyMem(world.seed.addr, val.addr, sizeof(int))
   world.makeOres()
   world.randState = initRand(world.seed)
+  var startLocation = Location(id: world.nextLocationID())
+  startLocation.add:
+    SpaceEntity(
+      kind: Ship,
+      name: playerName,
+      x: 500,
+      shipData:
+        ShipData(
+          glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
+          systems: @[
+            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50, powerUsage: 100),
+            System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
+            System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
+            System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100),
+            System(name: insStr"Drill1", kind: ToolBay, interactionDelay: 1f, toolRange: 10),
+            System(name: insStr"BasicStorage", kind: Inventory, maxWeight: 1000),
+          ]
+      )
+    )
 
+  let ores = world.getItems({Ore})
+  for i in 0..100:
+    let entity =
+      case world.randState.rand(EntityKind)
+      of Asteroid:
+        var
+          spawnable = {range[0..100](0) .. range[0..100](ores.high)}
+          asteroid = SpaceEntity(kind: Asteroid, name: "Asteroid")
+
+        for _ in 0..world.randState.rand(ores.high):
+          let ore = world.randState.sample(spawnable)
+          spawnable.excl ore
+          asteroid.resources.add InventoryItem(entry: ores[int ore], amount: world.randState.rand(100))
+        asteroid
+      else:
+        SpaceEntity(name: "testerino")
+    startLocation.add entity
+
+
+  world.locations.add startLocation
 
 func getEntity*(world: World, entity: ControlledEntity): lent SpaceEntity =
   world.locations[entity.location.int].entities[entity.entryId]
@@ -124,8 +174,10 @@ func entityExists*(world: World, locationId: LocationId, name: InsensitiveString
       return true
 
 
-iterator allInSensors*(world: World, entity: string): lent SpaceEntity =
-  discard
+iterator allInSensors*(world: World, entity: ControlledEntity): lent SpaceEntity =
+  for i, x in world.locations[int entity.location].entities:
+    if i != entity.entryId:
+      yield x
 
 proc update*(world: var World, dt: float32) =
   discard

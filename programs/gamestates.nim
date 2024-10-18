@@ -188,7 +188,7 @@ import programutils
 export programutils
 
 import
-  helps, eventprinter, manuals, shops, statuses, textconfig, auxiliarycommands
+  helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands
 
 proc splitVertical(gameState: var GameState, screen: Screen) =
   screen.action = Nothing
@@ -464,8 +464,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
     if truss.inputs.isDownRepeating(KeycodeReturn)and gameState.input.str.len > 0:
       let name = gameState.popInput()
-      let loc = gamestate.activeShipEntity.location
-      gameState.screen.shipStack.add ControlledEntity(location: loc, entryId: gamestate.world.getEntityId(loc, name))
+      gameState.screen.shipStack.add ControlledEntity(location: LocationId(0), entryId: 0) # Player is always first entity made
       gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
       gameState.buffer.put ShellCarrot

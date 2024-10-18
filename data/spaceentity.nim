@@ -80,8 +80,8 @@ type
       hackSpeed*: int
       hackRange*: int
     of Inventory:
-      inventory: Table[InsensitiveString, InventoryItem]
-      maxWeight: int # Exceeding this causes the ship to slow down
+      inventory*: Table[InsensitiveString, InventoryItem]
+      maxWeight*: int # Exceeding this causes the ship to slow down
     of Generator:
       discard
 
