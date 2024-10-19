@@ -1,6 +1,6 @@
 import spaceentity, insensitivestrings, inventories
 import "$projectdir"/screenutils/screenrenderer
-import std/[options, tables, setutils, random, sysrand, hashes]
+import std/[options, tables, setutils, random, sysrand, hashes, deques]
 
 type
   Location = object
@@ -9,19 +9,51 @@ type
     x,y: int
     entities: seq[SpaceEntity] # Use a quad tree?
     neighbours: array[10, Option[LocationId]]
+    combats: seq[Combat] # If player is not in it, slowly tick it along simulating combat
+    nameCount: CountTable[string]
 
   ControlledEntity* = ref object
     location*: LocationId
     entryId*: int
 
+  EnergyPoints = enum
+    Weapons
+    Shields
+    Logistics
+    Engines
+
+  CombatState = object
+    hull*: int
+    maxHull: int
+    shield*: int
+    maxShield*: int
+    energyDistribution: array[EnergyPoints, int]
+    energyCount: int
+    theShip: ControlledEntity
+
+
+  Combat = object # TODO: Move to own module?
+    ships: Table[int, CombatState] # Ships engaged in this combat
+    turnOrder: Deque[int] # always `popFirst` uses deque to add dynamically
+
+
+
   World* = object
     idCounter: LocationId
     locations: seq[Location] # 0th location is always 0, 0
-    nameToLocation: Table[InsensitiveString, LocationId] # So we can O(1) find from user input, consider `pathto kronos` which finds the shortest path through non hostile space
+    nameToLocation: Table[InsensitiveString, LocationId] # So we can O(1) find from user input, consider `info sol` which provides known information about `sol` (stations, scanned asterorids, phenmonenon)
     playerName: string # GUID no other ship can use this
     seed: int # Start seed to allow reloading state from chunks
     randState*: Rand
     inventoryItems: Table[InsensitiveString, InventoryEntry] # We do not want to remake InventoryItems so they're the same off reference
+
+proc nextName(loc: var Location, name: string): string =
+  result = name
+  let count = loc.nameCount.getOrDefault(name)
+  if count != 0:
+    result.add $count
+
+  inc loc.nameCount, name
 
 
 proc nextLocationID(world: var World): LocationId =
@@ -32,7 +64,6 @@ proc add*(location: var Location, ent: sink SpaceEntity) =
   ent.location = location.id
   ent.locationIndex = location.entities.len
   location.entities.add ent
-
 
 proc isReady*(world: World): bool = world.playerName.len != 0
 
@@ -118,7 +149,7 @@ proc init*(world: var World, playerName, seed: string) =
       of Asteroid:
         var
           spawnable = {range[0..100](0) .. range[0..100](ores.high)}
-          asteroid = SpaceEntity(kind: Asteroid, name: "Asteroid")
+          asteroid = SpaceEntity(kind: Asteroid, name: startLocation.nextName("Asteroid"))
 
         for _ in 0..world.randState.rand(ores.high):
           let ore = world.randState.sample(spawnable)
@@ -126,7 +157,7 @@ proc init*(world: var World, playerName, seed: string) =
           asteroid.resources.add InventoryItem(entry: ores[int ore], amount: world.randState.rand(100))
         asteroid
       else:
-        SpaceEntity(name: "testerino")
+        SpaceEntity(name: startLocation.nextName("testerino"), kind: Station)
     startLocation.add entity
 
 
@@ -137,6 +168,11 @@ func getEntity*(world: World, entity: ControlledEntity): lent SpaceEntity =
 
 func getEntity*(world: var World, entity: ControlledEntity): var SpaceEntity =
   world.locations[entity.location.int].entities[entity.entryId]
+
+func hasEntity*(world: World, locationId: LocationId, name: string, kind: set[EntityKind] = EntityKind.fullSet): bool =
+  for x in world.locations[locationId.int].entities:
+    if x.name == InsensitiveString(name):
+      return x.kind in kind
 
 func getEntity*(world: World, locationId: LocationId, name: string): lent SpaceEntity =
   for x in world.locations[locationId.int].entities:

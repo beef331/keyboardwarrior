@@ -1,7 +1,7 @@
 import ../screenutils/screenrenderer
 import ../data/[spaceentity, insensitivestrings, worlds]
 import pkg/[chroma, pixie, truss3D, traitor]
-import std/[tables, strutils, hashes, random]
+import std/[tables, strutils, hashes, random, setutils]
 import pkg/truss3D/[inputs]
 import screens
 
@@ -146,6 +146,10 @@ proc getEntity*(gameState: GameState, entity: ControlledEntity): lent SpaceEntit
 proc getEntity*(gameState: var GameState, entity: ControlledEntity): var SpaceEntity =
   gameState.world.getEntity(entity)
 
+proc hasEntity*(gameState: GameState, name: string, kind: set[EntityKind] = EntityKind.fullset): bool =
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.hasEntity(loc, name, kind)
+
 proc getEntity*(gameState: GameState, name: string): lent SpaceEntity =
   let loc = gamestate.screen.shipStack[^1].location
   gameState.world.getEntity(loc, name)
@@ -188,7 +192,7 @@ import programutils
 export programutils
 
 import
-  helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands
+  helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands, combats
 
 proc splitVertical(gameState: var GameState, screen: Screen) =
   screen.action = Nothing

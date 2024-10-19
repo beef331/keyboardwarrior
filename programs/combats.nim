@@ -1,94 +1,41 @@
 {.used.}
 import gamestates
-import std/[strscans, setutils, strbasics]
-import "$projectdir"/data/[spaceentity, insensitivestrings]
+import std/[strscans, setutils, strbasics, strformat]
+import "$projectdir"/data/[spaceentity, insensitivestrings, worlds]
 import "$projectdir"/utils/todoer
 
 type
-  Target = object
+  Combat = object
   Fire = object
 
-proc handler(_: Target, gameState: var GameState, input: string) =
-  if (var (success, bay, target) = input.scanTuple("$s$+ $s$+$."); success):
+proc handler(_: Combat, gameState: var GameState, input: string) =
+  if (var (success, target) = input.scanTuple("$s$+"); success):
     target.strip()
-    var found = false
-    for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
-      if sys.name == InsensitiveString(bay):
-        found = true
-        if not gameState.world.entityExists(target):
-          gameState.writeError("No target named: '" & target & "'.")
-        else:
-          if sys.kind == ToolBay:
-            sys.toolTarget = target
-            sys.flags.incl Toggled
-          else:
-            sys.weaponTarget = target
-        break
-
-
-    if not found:
-      gameState.writeError("No bay named: '" & bay & "'.")
-
-
+    if gameState.hasEntity(target, {Ship, Station}):
+      discard
+    else:
+      gameState.writeError(fmt"No ship or station named: '{target}' found.")
   else:
-    gameState.writeError("Expected: 'target WeaponBay Target'.")
+    gameState.writeError("Expected: 'combat target'.")
 
 iterator bays(gameState: GameState, hasTarget = false): string =
   for wBay in gameState.activeShipEntity.poweredSystemsOf({WeaponBay, ToolBay}):
     if (hasTarget and wbay.weaponTarget != "") or not hasTarget:
       yield string wbay.name
 
-proc suggest(_: Target, gameState: GameState, input: string, ind: var int): string =
+proc suggest(_: Combat, gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
   of 0, 1:
-    suggestNext(gameState.bays, input, ind)
-  of 2:
-    iterator entities(gameState: GameState): string =
+    iterator allShips(gameState: GameState): string =
       for ent in gameState.world.allInSensors(gameState.activeShip):
-        yield ent.name
-    suggestNext(gameState.entities, input, ind)
+        if ent.kind in {Ship, Station}:
+          yield ent.name
+    suggestNext(gameState.allShips(), input, ind)
   else:
     ""
 
-proc name(_: Target): string = "target"
-proc help(_: Target): string = "Sets the target of a specific bay."
-proc manual(_: Target): string = ""
+proc name(_: Combat): string = "combat"
+proc help(_: Combat): string = "Start combat with a ship or station"
+proc manual(_: Combat): string = ""
 
-proc handler(_: Fire, gameState: var GameState, input: string) =
-  if (var (success, bay) = input.scanTuple("$s$+$."); success):
-    bay.strip()
-    var found = false
-    for sys in gameState.activeShipEntity.systemsOf({WeaponBay, ToolBay}):
-      if sys.name == InsensitiveString(bay):
-        found = true
-        if sys.kind == ToolBay:
-          gameState.writeError("Cannot fire a toolbay.")
-        elif Powered notin sys.flags:
-          gameState.writeError("Cannot fire a unpowered weapon bay.")
-        elif not gameState.world.entityExists(sys.weaponTarget):
-          gameState.writeError("Invalid target")
-        else:
-          sys.flags[Toggled] = Toggled notin sys.flags
-        break
-
-
-    if not found:
-      gameState.writeError("No bay named: '" & bay & "'")
-
-
-  else:
-    gameState.writeError("Expected: 'fire BayName'.")
-
-proc suggest(_: Fire, gameState: GameState, input: string, ind: var int): string =
-  case input.suggestIndex()
-  of 0, 1:
-    suggestNext(gameState.bays(true), input, ind)
-  else:
-    ""
-
-proc name(_: Fire): string = "fire"
-proc help(_: Fire): string = "Toggles the fire state of a weapon bay. If active shuts it off."
-proc manual(_: Fire): string = ""
-
-storeCommand Target().toTrait(CommandImpl)
-storeCommand Fire().toTrait(CommandImpl)
+storeCommand Combat().toTrait(CommandImpl)
