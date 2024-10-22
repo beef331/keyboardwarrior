@@ -96,8 +96,8 @@ type
   SpaceEntity* = object
     location*: LocationId # Which node are we in?
     locationIndex*: int # What is the entity index in this location?
-    currentHull: int
-    maxHull: int
+    currentHull*: int
+    maxHull*: int
     state: EntityState
     name*: string
     faction*: Faction

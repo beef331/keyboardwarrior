@@ -29,7 +29,7 @@ type
     maxShield*: int
     energyDistribution: array[EnergyPoints, int]
     energyCount: int
-    theShip: ControlledEntity
+    entity: ControlledEntity
 
 
   Combat = object # TODO: Move to own module?
@@ -198,7 +198,6 @@ func getEntityId*(world: World, locationId: LocationId, name: InsensitiveString)
       return i
   raise newException(ValueError, "Cannot find entity named: " & name)
 
-
 func entityExists*(world: World, locationId: LocationId, name: string): bool =
   for x in world.locations[locationId.int].entities:
     if x.name == InsensitiveString(name):
@@ -208,6 +207,50 @@ func entityExists*(world: World, locationId: LocationId, name: InsensitiveString
   for x in world.locations[locationId.int].entities:
     if x.name == name:
       return true
+
+func tryJoinCombat(world: var World, combat: var Combat, initiator: ControlledEntity, target: InsensitiveString): bool =
+  ## Joins an existent combat if target is in combat, returns whether it joined
+  for ent in combat.ships.values:
+    if world.getEntity(ent.entity).name == target:
+      combat.ships[combat.ships.len] = CombatState(entity: initiator)
+      combat.turnOrder.addFirst(combat.ships.len - 1) # The initiator takes the next move 'always
+      return true
+
+func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
+  result = move state
+  result.hull  = entity.currentHull
+  result.maxHull = entity.maxHull
+  #[
+  for system in entity.systemsOf({Shield}):
+    result.maxShield += system.maxShield
+
+  for system in entity.systemsOf({WeaponBay}):
+    discard
+  ]#
+
+
+func enterCombat*(world: var World, initiator: ControlledEntity, target: string) =
+  var joined = false
+  for combat in world.locations[initiator.location.int].combats.mitems:
+    if (joined = world.tryJoinCombat(combat, initiator, target.InsensitiveString); joined):
+      break
+
+  if not joined:
+    let theTarget = ControlledEntity(location: initiator.location)
+    for i, x in world.locations[initiator.location.int].entities:
+      if x.name == target.InsensitiveString:
+        theTarget.entryId = i
+        break
+
+    assert theTarget != nil
+
+    world.locations[initiator.location.int].combats.add Combat(
+      ships: {
+        0: CombatState(entity: initiator).startCombat(world.getEntity(initiator)),
+        1: CombatState(entity: theTarget).startCombat(world.getEntity(theTarget))
+      }.toTable(),
+      turnOrder: [0, 1].toDeque()
+    )
 
 
 iterator allInSensors*(world: World, entity: ControlledEntity): lent SpaceEntity =

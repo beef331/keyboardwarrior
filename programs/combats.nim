@@ -12,7 +12,7 @@ proc handler(_: Combat, gameState: var GameState, input: string) =
   if (var (success, target) = input.scanTuple("$s$+"); success):
     target.strip()
     if gameState.hasEntity(target, {Ship, Station}):
-      discard
+      gameState.world.enterCombat(gameState.activeShip, target)
     else:
       gameState.writeError(fmt"No ship or station named: '{target}' found.")
   else:
