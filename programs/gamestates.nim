@@ -64,7 +64,7 @@ type
 implTrait Program
 implTrait CommandImpl
 
-var handlers: Table[InsensitiveString, Command]
+var defaultHandlers*: array[EntityState, Table[InsensitiveString, Command]]
 
 iterator activeProgramsByName*(gameState: GameState): lent string =
   let controlledEnt = gameState.screen.shipStack[^1]
@@ -72,9 +72,7 @@ iterator activeProgramsByName*(gameState: GameState): lent string =
     for k, v in gameState.programs[controlledEnt]:
       yield string(k)
 
-iterator commands*(gameState: GameState): Command =
-  for command in handlers.values:
-    yield command
+
 
 iterator screens*(gameState: var GameState): Screen =
   for screen in gameState.rootScreen.screens:
@@ -133,8 +131,16 @@ proc exitProgram*(gameState: var GameState) =
 proc hasProgram*(gameState: var GameState, name: string): bool =
   gameState.activeShip in gameState.programs and name.InsensitiveString in gameState.programs[gameState.activeShip]
 
-proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in handlers
-proc getCommand*(gameState: var GameState, name: string): Command = handlers[InsensitiveString(name)]
+proc defaultCommands(gameState: GameState): lent Table[InsensitiveString, Command] =
+  defaultHandlers[gameState.activeShipEntity.state]
+
+
+iterator commands*(gameState: GameState): Command =
+  for command in gameState.defaultCommands().values:
+    yield command
+
+proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.defaultCommands()
+proc getCommand*(gameState: var GameState, name: string): Command = gameState.defaultCommands()[InsensitiveString(name)]
 
 proc entityExists*(gameState: var GameState, name: string): bool =
   let loc = gamestate.screen.shipStack[^1].location
@@ -272,13 +278,6 @@ proc splitHorizontal(gameState: var GameState, screen: Screen) =
   inc gameState.screenCount
 
 
-handlers = block:
-  var res: Table[InsensitiveString, Command]
-  for x in getCommands():
-    res[InsensitiveString x.name()] = x
-  res
-
-
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
   if gameState.screen == gameState.rootScreen:
     gameState.writeError("You cannot leave your own ship")
@@ -356,9 +355,9 @@ proc dispatchCommand(gameState: var GameState) =
           input.high
       command = insStr input[0..ind]
     gameState.buffer.newLine()
-    if command in handlers:
+    if command in gameState.defaultCommands():
       gameState.clearSuggestion()
-      handlers[command].handler(gameState, input[ind + 1 .. input.high])
+      gameState.defaultCommands()[command.InsensitiveString].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command")
 
@@ -374,11 +373,11 @@ proc suggest(gameState: var GameState) =
         else:
           input.high
       command = insStr input[0..ind]
-    if command in handlers:
-      gameState.input.suggestion = handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
+    if command in gameState.defaultCommands():
+      gameState.input.suggestion = gameState.defaultCommands()[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
   else: # We search top level commands
     iterator handlerStrKeys(gameState: GameState): string =
-      for key in handlers.keys:
+      for key in gameState.defaultCommands().keys:
         yield string key
     gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 

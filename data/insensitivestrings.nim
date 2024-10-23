@@ -4,6 +4,8 @@ type InsensitiveString* = distinct string
 converter toString*(str: InsensitiveString): lent string = string(str)
 converter toString*(str: var InsensitiveString): var string = string(str)
 
+proc `$`*(a: InsensitiveString): string {.borrow.}
+
 proc `==`*(a, b: InsensitiveString): bool =
   cmpIgnoreStyle(a, b) == 0
 

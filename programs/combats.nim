@@ -18,11 +18,6 @@ proc handler(_: Combat, gameState: var GameState, input: string) =
   else:
     gameState.writeError("Expected: 'combat target'.")
 
-iterator bays(gameState: GameState, hasTarget = false): string =
-  for wBay in gameState.activeShipEntity.poweredSystemsOf({WeaponBay, ToolBay}):
-    if (hasTarget and wbay.weaponTarget != "") or not hasTarget:
-      yield string wbay.name
-
 proc suggest(_: Combat, gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
   of 0, 1:

@@ -220,13 +220,13 @@ func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
   result = move state
   result.hull  = entity.currentHull
   result.maxHull = entity.maxHull
-  #[
+
   for system in entity.systemsOf({Shield}):
     result.maxShield += system.maxShield
 
+
   for system in entity.systemsOf({WeaponBay}):
     discard
-  ]#
 
 
 func enterCombat*(world: var World, initiator: ControlledEntity, target: string) =

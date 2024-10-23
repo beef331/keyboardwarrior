@@ -89,7 +89,7 @@ type
     glyphProperties*: GlyphProperties
     systems*: seq[System]
 
-  EntityState = enum
+  EntityState* = enum
     InWorld
     InCombat
 
@@ -98,7 +98,7 @@ type
     locationIndex*: int # What is the entity index in this location?
     currentHull*: int
     maxHull*: int
-    state: EntityState
+    state*: EntityState
     name*: string
     faction*: Faction
     x*, y*: float32
@@ -135,22 +135,24 @@ proc weight*(spaceEntity: SpaceEntity): int =
     assert false, "Unimplemented weight for: " & $spaceEntity.kind
 
 iterator systemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
-  for system in entity.shipData.systems:
-    when filter is NotSystem:
-      if system.kind notin filter.set[:SystemKind]:
-        yield system
-    else:
-      if system.kind in filter:
-        yield system
+  if entity.shipData != nil:
+    for system in entity.shipData.systems:
+      when filter is NotSystem:
+        if system.kind notin filter.set[:SystemKind]:
+          yield system
+      else:
+        if system.kind in filter:
+          yield system
 
 iterator systemsOf*(entity: var SpaceEntity, filter: set[SystemKind] | NotSystem): var System =
-  for system in entity.shipData.systems.mitems:
-    when filter is NotSystem:
-      if system.kind notin filter.set[:SystemKind]:
-        yield system
-    else:
-      if system.kind in filter:
-        yield system
+  if entity.shipData != nil:
+    for system in entity.shipData.systems.mitems:
+      when filter is NotSystem:
+        if system.kind notin filter.set[:SystemKind]:
+          yield system
+      else:
+        if system.kind in filter:
+          yield system
 
 iterator poweredSystemsOf*(entity: SpaceEntity, filter: set[SystemKind] | NotSystem): lent System =
   for system in entity.shipData.systems:
