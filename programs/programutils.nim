@@ -1,6 +1,7 @@
 import std/[os, strutils, tables, setutils]
 import gamestates
 import "$projectdir"/data/[spaceentity, insensitivestrings]
+export EntityState
 
 proc insensitiveStartsWith*(a, b: openArray[char]): bool =
   if a.len < b.len:

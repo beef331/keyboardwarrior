@@ -251,7 +251,9 @@ func enterCombat*(world: var World, initiator: ControlledEntity, target: string)
       }.toTable(),
       turnOrder: [0, 1].toDeque()
     )
+    world.locations[theTarget.location.int].entities[theTarget.entryId].state = InCombat
 
+  world.locations[initiator.location.int].entities[initiator.entryId].state = InCombat
 
 iterator allInSensors*(world: World, entity: ControlledEntity): lent SpaceEntity =
   for i, x in world.locations[int entity.location].entities:

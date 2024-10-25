@@ -42,6 +42,8 @@ type
     screenCount: int
 
     programs: Table[ControlledEntity, Table[InsensitiveString, Traitor[Program]]]
+    entitySpecificCommands: Table[ControlledEntity, array[EntityState, Table[InsensitiveString, Traitor[CommandImpl]]]]
+
 
     history: seq[string]
     historyPos: int
@@ -335,6 +337,9 @@ proc clearSuggestion(gameState: var GameState) =
   gamestate.input.suggestion = ""
   gamestate.input.suggestionInd = -1
 
+proc entityCommands(gameState: GameState): lent Table[InsensitiveString, Command] =
+  gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state]
+
 proc takeSuggestion(gameState: var GameState) =
   gameState.input.str.add gameState.input.suggestion
   gameState.input.str.add " "
@@ -353,11 +358,13 @@ proc dispatchCommand(gameState: var GameState) =
           ind - 1
         else:
           input.high
-      command = insStr input[0..ind]
+      command = InsensitiveString input[0..ind]
     gameState.buffer.newLine()
+    gameState.clearSuggestion()
     if command in gameState.defaultCommands():
-      gameState.clearSuggestion()
-      gameState.defaultCommands()[command.InsensitiveString].handler(gameState, input[ind + 1 .. input.high])
+      gameState.defaultCommands()[command].handler(gameState, input[ind + 1 .. input.high])
+    elif command in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state]:
+      gameState.entityCommands[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command")
 
@@ -379,6 +386,9 @@ proc suggest(gameState: var GameState) =
     iterator handlerStrKeys(gameState: GameState): string =
       for key in gameState.defaultCommands().keys:
         yield string key
+      for key in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state].keys:
+        yield string key
+
     gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 
 

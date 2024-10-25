@@ -33,4 +33,4 @@ proc name(_: Combat): string = "combat"
 proc help(_: Combat): string = "Start combat with a ship or station"
 proc manual(_: Combat): string = ""
 
-storeCommand Combat().toTrait(CommandImpl)
+storeCommand Combat().toTrait(CommandImpl), {InWorld}

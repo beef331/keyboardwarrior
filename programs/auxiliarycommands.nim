@@ -49,7 +49,7 @@ proc handler(_: ExitCommand, gameState: var GameState, input: string) =
 
 proc suggest(_: ExitCommand, gs: GameState, input: string, ind: var int): string = discard
 
-storeCommand ExitCommand().toTrait(CommandImpl)
+storeCommand ExitCommand().toTrait(CommandImpl), {InWorld}
 
 proc name(_: ClearCommand): string = "clear"
 proc help(_: ClearCommand): string = "Clears the screen"
