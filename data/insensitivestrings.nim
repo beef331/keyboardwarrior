@@ -18,3 +18,10 @@ proc hash*(str: InsensitiveString): Hash =
   result = !$result
 
 proc insStr*(s: sink string): InsensitiveString = InsensitiveString(s)
+
+
+proc insensitiveParseEnum*[T: enum](val: string): T =
+  for x in T:
+    if InsensitiveString($x) == InsensitiveString(val):
+      return x
+  raise newException(ValueError, "No value named: " & val  & " in " & $T)

@@ -363,7 +363,7 @@ proc dispatchCommand(gameState: var GameState) =
     gameState.clearSuggestion()
     if command in gameState.defaultCommands():
       gameState.defaultCommands()[command].handler(gameState, input[ind + 1 .. input.high])
-    elif command in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state]:
+    elif gameState.activeShip in gamestate.entitySpecificCommands and command in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state]:
       gameState.entityCommands[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command")
@@ -386,8 +386,9 @@ proc suggest(gameState: var GameState) =
     iterator handlerStrKeys(gameState: GameState): string =
       for key in gameState.defaultCommands().keys:
         yield string key
-      for key in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state].keys:
-        yield string key
+      if gameState.activeShip in gameState.entitySpecificCommands:
+        for key in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state].keys:
+          yield string key
 
     gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 

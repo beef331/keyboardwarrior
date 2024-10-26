@@ -16,25 +16,26 @@ type
     location*: LocationId
     entryId*: int
 
-  EnergyPoints = enum
+  EnergyPoints* = enum
     Weapons
     Shields
     Logistics
     Engines
 
-  CombatState = object
+  CombatState* = ref object
     hull*: int
     maxHull: int
     shield*: int
     maxShield*: int
-    energyDistribution: array[EnergyPoints, int]
-    energyCount: int
+    energyDistribution*: array[EnergyPoints, int]
+    energyCount*: int
+    maxEnergyCount*: int
     entity: ControlledEntity
 
 
-  Combat = object # TODO: Move to own module?
-    ships: Table[int, CombatState] # Ships engaged in this combat
-    turnOrder: Deque[int] # always `popFirst` uses deque to add dynamically
+  Combat* = ref object # TODO: Move to own module?
+    entityToCombat*: Table[ControlledEntity, CombatState]
+    turnOrder*: Deque[ControlledEntity] # always `popFirst` uses deque to add dynamically
 
 
 
@@ -208,12 +209,19 @@ func entityExists*(world: World, locationId: LocationId, name: InsensitiveString
     if x.name == name:
       return true
 
+func findCombatWith*(world: var World, entity: ControlledEntity): Combat =
+  for combat in world.locations[entity.location.int].combats:
+    if entity in combat.entityToCombat:
+      return combat
+
+  raise newException(ValueError, "No ship in combat")
+
 func tryJoinCombat(world: var World, combat: var Combat, initiator: ControlledEntity, target: InsensitiveString): bool =
   ## Joins an existent combat if target is in combat, returns whether it joined
-  for ent in combat.ships.values:
-    if world.getEntity(ent.entity).name == target:
-      combat.ships[combat.ships.len] = CombatState(entity: initiator)
-      combat.turnOrder.addFirst(combat.ships.len - 1) # The initiator takes the next move 'always
+  for ent in combat.entityToCombat.keys:
+    if world.getEntity(ent).name == target:
+      combat.entityToCombat[initiator] = CombatState(entity: initiator)
+      combat.turnOrder.addFirst(initiator) # The initiator takes the next move 'always
       return true
 
 func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
@@ -245,11 +253,11 @@ func enterCombat*(world: var World, initiator: ControlledEntity, target: string)
     assert theTarget != nil
 
     world.locations[initiator.location.int].combats.add Combat(
-      ships: {
-        0: CombatState(entity: initiator).startCombat(world.getEntity(initiator)),
-        1: CombatState(entity: theTarget).startCombat(world.getEntity(theTarget))
+      entityToCombat: {
+        initiator: CombatState(entity: initiator, energyCount: 10).startCombat(world.getEntity(initiator)),
+        theTarget: CombatState(entity: initiator, energyCount: 10).startCombat(world.getEntity(initiator))
       }.toTable(),
-      turnOrder: [0, 1].toDeque()
+      turnOrder: [initiator, theTarget].toDeque()
     )
     world.locations[theTarget.location.int].entities[theTarget.entryId].state = InCombat
 
