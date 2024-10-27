@@ -254,8 +254,8 @@ func enterCombat*(world: var World, initiator: ControlledEntity, target: string)
 
     world.locations[initiator.location.int].combats.add Combat(
       entityToCombat: {
-        initiator: CombatState(entity: initiator, energyCount: 10).startCombat(world.getEntity(initiator)),
-        theTarget: CombatState(entity: initiator, energyCount: 10).startCombat(world.getEntity(initiator))
+        initiator: CombatState(entity: initiator, energyCount: 10, maxEnergyCount: 10).startCombat(world.getEntity(initiator)),
+        theTarget: CombatState(entity: initiator, energyCount: 10, maxEnergyCount: 10).startCombat(world.getEntity(initiator))
       }.toTable(),
       turnOrder: [initiator, theTarget].toDeque()
     )

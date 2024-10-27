@@ -36,22 +36,33 @@ proc manual(_: Combat): string = ""
 
 storeCommand Combat().toTrait(CommandImpl), {InWorld}
 
+proc printCurrentEnergy(gameState: var GameState) =
+  let
+    combat = gameState.world.findCombatWith(gameState.activeShip)
+    combatState = combat.entityToCombat[gameState.activeShip]
+
+  const color = [
+    Weapons: parseHtmlColor"orange",
+    Shields: parseHtmlColor"blue",
+    Logistics: parseHtmlColor"green",
+    Engines: parseHtmlColor"yellow",
+  ]
+
+
+  gameState.buffer.put "Unallocated " & "■".repeat(combatState.energyCount)
+  gameState.buffer.put "□".repeat(combatState.maxEnergyCount - combatState.energyCount), GlyphProperties(foreground: parseHtmlColor"grey")
+  gameState.buffer.newline()
+
+  for name, energy in combatState.energyDistribution:
+    gameState.buffer.put $name & " " & "■".repeat(energy), GlyphProperties(foreground: color[name])
+    gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name])
+    gameState.buffer.newline()
+
 
 proc handler(_: Energy, gameState: var GameState, input: string) =
+  var errored = false
   if input.isEmptyOrWhitespace():
-    let combat = gameState.world.findCombatWith(gameState.activeShip)
-    const color = [
-      Weapons: parseHtmlColor"orange",
-      Shields: parseHtmlColor"blue",
-      Logistics: parseHtmlColor"green",
-      Engines: parseHtmlColor"yellow",
-    ]
-
-
-    for name, energy in combat.entityToCombat[gameState.activeShip].energyDistribution:
-      gameState.buffer.put $name & " " & "■".repeat(energy), GlyphProperties(foreground: color[name])
-      gameState.buffer.newline()
-
+    discard
 
   elif (var (success, energy, amount) = input.scanTuple("$s$+ $i"); success):
     try:
@@ -62,8 +73,10 @@ proc handler(_: Energy, gameState: var GameState, input: string) =
         maxEnergyForSystem = combatState.energyDistribution[power] + combatState.energyCount
 
       if amount < 0:
+        errored = true
         gameState.writeError("Cannot set the power to below zero.")
       elif amount > maxEnergyForSystem:
+        errored = true
         gameState.writeError(fmt"Cannot give the system more than {maxEnergyForSystem} with currrent energy distribution.")
       else:
         let toAdd = amount - combatState.energyDistribution[power]
@@ -71,9 +84,15 @@ proc handler(_: Energy, gameState: var GameState, input: string) =
         combatState.energyCount -= toAdd
 
     except CatchableError:
+      errored = true
       gameState.writeError("Expected {Shield | Weapon | Logistics | Engine}.")
   else:
+    errored = true
     gameState.writeError("Expected: 'energy {Shield | Weapon | Logistic | Engine} powerlevel'.")
+
+  if not errored:
+    gameState.printCurrentEnergy()
+
 
 proc suggest(_: Energy, gameState: GameState, input: string, ind: var int): string =
   case input.suggestIndex()
