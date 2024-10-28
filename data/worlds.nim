@@ -133,11 +133,11 @@ proc init*(world: var World, playerName, seed: string) =
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
           systems: @[
-            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50, powerUsage: 100),
-            System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100, powerUsage: 25),
-            System(name: insStr"Warp Core", kind: Generator, powerUsage: 300),
-            System(name: insStr"WBay1", kind: WeaponBay, interactionDelay: 0.7f, currentAmmo: 100),
-            System(name: insStr"Drill1", kind: ToolBay, interactionDelay: 1f, toolRange: 10),
+            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50),
+            System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
+            System(name: insStr"Warp Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
+            System(name: insStr"WBay1", kind: WeaponBay),
+            System(name: insStr"Drill1", kind: ToolBay),
             System(name: insStr"BasicStorage", kind: Inventory, maxWeight: 1000),
           ]
       )
@@ -228,6 +228,8 @@ func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
   result = move state
   result.hull  = entity.currentHull
   result.maxHull = entity.maxHull
+  result.maxEnergyCount = entity.generatedPower()
+  result.energyCount = result.maxEnergyCount
 
   for system in entity.systemsOf({Shield}):
     result.maxShield += system.maxShield
@@ -254,8 +256,8 @@ func enterCombat*(world: var World, initiator: ControlledEntity, target: string)
 
     world.locations[initiator.location.int].combats.add Combat(
       entityToCombat: {
-        initiator: CombatState(entity: initiator, energyCount: 10, maxEnergyCount: 10).startCombat(world.getEntity(initiator)),
-        theTarget: CombatState(entity: initiator, energyCount: 10, maxEnergyCount: 10).startCombat(world.getEntity(initiator))
+        initiator: CombatState(entity: initiator).startCombat(world.getEntity(initiator)),
+        theTarget: CombatState(entity: theTarget).startCombat(world.getEntity(initiator))
       }.toTable(),
       turnOrder: [initiator, theTarget].toDeque()
     )

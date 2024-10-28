@@ -10,6 +10,7 @@ type
     Ship
     Station
     OreProcessor = "Ore-Processor"
+    Debris
 
   Faction* = enum
     Universe
@@ -20,71 +21,6 @@ type
     Jiborn
     #Custom = 16
 
-  SystemKind* = enum
-    Sensor
-    WeaponBay ## Turrets, Missiles bays, ...
-    ToolBay ## Drills, welders, ...
-    Thruster
-    Shield
-    Nanites
-    AutoLoader
-    AutoTargetting
-    Hacker
-    Inventory
-    Generator ## Generates power
-
-  WeaponKind* = enum
-    Bullet
-    Guass
-    RocketVolley
-    Missile
-    Nuke
-
-  ToolKind* = enum
-    Drill
-    Welder
-
-  SystemFlag* = enum
-    Powered
-    Jammed
-    Toggled
-
-  System* = object
-    name*: InsensitiveString
-    powerUsage*: int # Generated when a generator
-    flags*: set[SystemFlag] = {Powered}
-    interactionTime*: float32
-    interactionDelay*: float32
-    case kind*: SystemKind
-    of Sensor:
-      sensorRange*: int
-    of WeaponBay:
-      weaponTarget*: string
-      weaponkind*: WeaponKind
-      maxAmmo*: int
-      currentAmmo*: int
-    of ToolBay:
-      toolTarget*: string # Use node id instead?
-      toolRange*: int
-    of Shield, Nanites:
-      currentShield*, maxShield*: int
-      regenRate*: int
-    of Thruster:
-      acceleration*: float32
-      maxSpeed*: float32
-    of AutoLoader:
-      discard
-    of AutoTargetting:
-      autoTarget*: string
-    of Hacker:
-      hackSpeed*: int
-      hackRange*: int
-    of Inventory:
-      inventory*: Table[InsensitiveString, InventoryItem]
-      maxWeight*: int # Exceeding this causes the ship to slow down
-    of Generator:
-      discard
-
   ShipData* = ref object # Pointer indirection to reduces size of SpaceEntity
     glyphProperties*: GlyphProperties
     systems*: seq[System]
@@ -92,6 +28,17 @@ type
   EntityState* = enum
     InWorld
     InCombat
+
+  DebrisKind* = enum
+    Item
+    System
+
+  DebrisItem* = object
+    case kind*: DebrisKind
+    of Item:
+      item*: InventoryItem
+    of System:
+      system*: System
 
   SpaceEntity* = object
     location*: LocationId # Which node are we in?
@@ -112,6 +59,9 @@ type
       resources*: seq[InventoryItem]
     of OreProcessor:
       smeltOptions*: seq[(int, InventoryEntry)]
+    of Debris:
+      debris: DebrisItem
+
 
   NotSystem* = distinct set[SystemKind]
 
@@ -186,12 +136,7 @@ iterator unpoweredSystems*(entity: SpaceEntity): lent System =
 
 proc generatedPower*(entity: SpaceEntity): int =
   for generator in entity.systemsOf({Generator}):
-    result.inc generator.powerUsage
-
-proc consumedPower*(entity: SpaceEntity): int =
-  for consumer in entity.systemsOf(NotSystem {Generator}):
-    if Powered in consumer.flags:
-      result.inc consumer.powerUsage
+    result.inc ceil(generator.powerGeneration.float32 * (generator.currentHealth.float32 / generator.maxHealth.float32)).int
 
 proc hasPoweredSystem*(entity: SpaceEntity, sys: SystemKind): bool =
   for system in entity.poweredSystemsOf({sys}):

@@ -1,6 +1,6 @@
 {.used.}
 import gamestates
-import ../data/spaceentity
+import ../data/[spaceentity, inventories]
 import ../screenutils/texttables
 
 proc powerFormat(i: int): string = $i & "kw"
@@ -9,21 +9,18 @@ type
   StatusEntry = object
     name: string
     powered: bool
-    powerConsumption {.tableStringify(powerFormat).}: int
     status: string
   StatusCommand = object
 
-proc status(sys: System): string =
+proc status(sys: inventories.System): string =
   case sys.kind
   of WeaponBay:
     if Jammed in sys.flags:
       "Jammed"
     elif Toggled in sys.flags:
       "Firing"
-    elif sys.weaponTarget == "":
-      "No Target"
     else:
-      "Target: " & sys.weaponTarget
+      ""
   else:
     ""
 
@@ -35,11 +32,6 @@ proc handler(_: StatusCommand, gameState: var GameState, input: string) =
     entries.add StatusEntry(
       name: system.name,
       powered: Powered in system.flags,
-      powerConsumption:(
-        if system.kind == Generator:
-          system.powerUsage
-        else:
-          -system.powerUsage),
       status: system.status,
       )
 
@@ -49,17 +41,11 @@ proc handler(_: StatusCommand, gameState: var GameState, input: string) =
           GlyphProperties(foreGround: parseHtmlColor"lime")
         else:
           GlyphProperties(foreGround: parseHtmlColor"red")
-      powerConsumption =
-        if entries[^1].powerConsumption > 0:
-          GlyphProperties(foreGround: parseHtmlColor"lime")
-        else:
-          GlyphProperties(foreGround: parseHtmlColor"red")
 
 
     props.add [
       gameState.buffer.properties,
       powerColour,
-      powerConsumption,
       gameState.buffer.properties
     ]
 
