@@ -2,6 +2,9 @@ import spaceentity, insensitivestrings, inventories
 import "$projectdir"/screenutils/screenrenderer
 import std/[options, tables, setutils, random, sysrand, hashes, deques]
 
+
+
+
 type
   Location = object
     name: InsensitiveString
@@ -16,28 +19,52 @@ type
     location*: LocationId
     entryId*: int
 
-  EnergyPoints* = enum
+  CombatSystemKind* = enum
     Weapons
     Shields
     Logistics
     Engines
+
+  CombatSystemFlag* = enum
+    Active
+
+
+  CombatSystem = object
+    realSystem: System
+    flags: set[CombatSystemFlag]
+    chargeAmount*: int # amount of turns charged
+
+
+  ActionEffect = enum
+    Interrupt
+
+
+  Action = object
+    effects: set[ActionEffect]
+    damages: array[DamageKind, int]
+    damageAmount: int
+    turnsToImpact: int
+    targetSystem: InsensitiveString
+    target: ControlledEntity
+
 
   CombatState* = ref object
     hull*: int
     maxHull: int
     shield*: int
     maxShield*: int
-    energyDistribution*: array[EnergyPoints, int]
+    energyDistribution*: array[CombatSystemKind, int]
+    systems*: Table[InsensitiveString, CombatSystem]
     energyCount*: int
     maxEnergyCount*: int
-    entity: ControlledEntity
+    entity*: ControlledEntity
+    actions: seq[Action]
 
 
   Combat* = ref object # TODO: Move to own module?
     entityToCombat*: Table[ControlledEntity, CombatState]
     turnOrder*: Deque[ControlledEntity] # always `popFirst` uses deque to add dynamically
-
-
+    activeEntity*: ControlledEntity
 
   World* = object
     idCounter: LocationId
@@ -283,3 +310,30 @@ iterator entitiesIn*(world: var World, id: LocationId, filter: set[EntityKind] =
   for ent in world.locations[id.int].entities.mitems:
     if ent.kind in filter:
       yield ent
+
+proc handle(action: Action, combatState: CombatState) =
+  if action.turnsToImpact <= 0:
+    let system = combatState.systems[action.targetSystem].realSystem
+    for kind, damage in action.damages:
+      system.currentHealth -= int(action.damageAmount.float32 * system.damageModifier[kind])
+    if Interrupt in action.effects:
+      combatState.systems[action.targetSystem].flags.excl Active
+
+
+
+proc endTurn*(combat: Combat) =
+  for system in combat.entityToCombat[combat.turnOrder.peekFirst()].systems.mvalues:
+    if Active in system.flags:
+      inc system.chargeAmount
+
+  for state in combat.entityToCombat.values:
+    for action in state.actions.mitems:
+      dec action.turnsToImpact
+      action.handle(state)
+
+
+
+
+
+  combat.turnOrder.addLast(combat.activeEntity)
+  combat.activeEntity = combat.turnOrder.popFirst()

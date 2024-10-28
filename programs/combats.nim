@@ -14,6 +14,19 @@ proc handler(_: Combat, gameState: var GameState, input: string) =
     target.strip()
     if gameState.hasEntity(target, {Ship, Station}):
       gameState.world.enterCombat(gameState.activeShip, target)
+      let combat = gameState.world.findCombatWith(gameState.activeShip)
+      gamestate.buffer.put "Entered combat with: "
+      for state in combat.entityToCombat.values:
+        if state.entity != gameState.activeShip:
+          gameState.buffer.put gameState.world.getEntity(state.entity).name, wrapped = true
+          gameState.buffer.put " ", wrapped = true
+
+      let pos = gameState.buffer.getPosition()
+      gameState.buffer.setPosition(pos[0] - 1, pos[1])
+      gameState.buffer.put "."
+      gameState.buffer.newline()
+
+
     else:
       gameState.writeError(fmt"No ship or station named: '{target}' found.")
   else:
@@ -55,7 +68,7 @@ proc printCurrentEnergy(gameState: var GameState) =
 
   for name, energy in combatState.energyDistribution:
     gameState.buffer.put $name & " " & "■".repeat(energy), GlyphProperties(foreground: color[name])
-    gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name])
+    gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name] * 0.25)
     gameState.buffer.newline()
 
 
@@ -67,7 +80,7 @@ proc handler(_: Energy, gameState: var GameState, input: string) =
   elif (var (success, energy, amount) = input.scanTuple("$s$+ $i"); success):
     try:
       let
-        power = insensitiveParseEnum[EnergyPoints](energy)
+        power = insensitiveParseEnum[CombatSystemKind](energy)
         combat = gameState.world.findCombatWith(gameState.activeShip)
         combatState = combat.entityToCombat[gameState.activeShip]
         maxEnergyForSystem = combatState.energyDistribution[power] + combatState.energyCount
@@ -98,7 +111,7 @@ proc suggest(_: Energy, gameState: GameState, input: string, ind: var int): stri
   case input.suggestIndex()
   of 0, 1:
     iterator powerableSystems(_: GameState): string =
-      for state in EnergyPoints:
+      for state in CombatSystemKind:
         yield $state
     suggestNext(gameState.powerableSystems(), input, ind)
   else:

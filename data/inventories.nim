@@ -38,6 +38,12 @@ type
     Inventory
     Generator ## Generates power
 
+  DamageKind* = enum
+    Fire
+    Shock
+    Cryo
+    Kinetic
+
   WeaponKind* = enum
     Bullet
     Guass
@@ -53,24 +59,28 @@ type
     Jammed
     Toggled
 
-  System* = object
+  System* = ref object # yet another ref, my cache coherency will cry
     name*: InsensitiveString
     flags*: set[SystemFlag] = {Powered}
     flavourText*: string
     currentHealth*: int
     maxHealth*: int
+    activateCost*: int # how many blocks does it cost
+    chargeEnergyCost*: int # how many blocks does this cost to use
+    chargeTurns*: int # how many turns does it take to charge?
+    damageModifier*: array[DamageKind, float32] = [Fire: 1f, 1, 1, 1]
+    damageDealt*: set[DamageKind]
+
     case kind*: SystemKind
     of Sensor:
       sensorRange*: int
     of WeaponBay:
       weaponkind*: WeaponKind
       damageDelay*: int # how many turns does this wait for damage?
-      chargeEnergyCost*: int # how many blocks does this cost to use
-      chargeTurns*: int # how many turns does it take to charge?
-      speedPerTurn*: int
+      damageTicks: int
+      timeTilDamage*: int
       attackRange*: int
       aoeRange*: int
-
     of ToolBay:
       toolTarget*: string # Use node id instead?
     of Shield, Nanites:
@@ -91,3 +101,6 @@ type
       maxWeight*: int # Exceeding this causes the ship to slow down
     of Generator:
       powerGeneration*: int
+
+
+proc doesCharge*(system: System): bool = system.chargeTurns > 0
