@@ -1,9 +1,6 @@
 import spaceentity, insensitivestrings, inventories
 import "$projectdir"/screenutils/screenrenderer
-import std/[options, tables, setutils, random, sysrand, hashes, deques]
-
-
-
+import std/[options, tables, setutils, random, sysrand, hashes, deques, decls]
 
 type
   Location = object
@@ -27,9 +24,20 @@ type
 
   CombatSystemFlag* = enum
     Active
+    Charged
+    Fire # Do we fire at end of this turn
+
+
+  CombatInteractError = enum
+    None
+    AlreadyPowered = "The system is already powered."
+    AlreadyUnpowered = "The system is already off."
+    NotEnoughPower = "There is not enough power allocated for the system."
+
 
 
   CombatSystem = object
+    kind: CombatSystemKind
     realSystem: System
     flags: set[CombatSystemFlag]
     chargeAmount*: int # amount of turns charged
@@ -53,6 +61,7 @@ type
     maxHull: int
     shield*: int
     maxShield*: int
+    energyUsed*: array[CombatSystemKind, int]
     energyDistribution*: array[CombatSystemKind, int]
     systems*: Table[InsensitiveString, CombatSystem]
     energyCount*: int
@@ -319,20 +328,53 @@ proc handle(action: Action, combatState: CombatState) =
     if Interrupt in action.effects:
       combatState.systems[action.targetSystem].flags.excl Active
 
+proc powerOn*(state: CombatState, system: InsensitiveString): CombatInteractError =
+  let sys {.byaddr.} = state.systems[system]
+  if sys.realSystem.chargeEnergyCost >= state.energyUsed[sys.kind]:
+    NotEnoughPower
+  elif Active in sys.flags:
+    AlreadyPowered
+  else:
+    sys.flags.incl Active
+    state.energyUsed[sys.kind] += sys.realSystem.chargeEnergyCost
+    None
+
+proc powerOff*(state: CombatState, system: InsensitiveString): CombatInteractError =
+  let sys {.byaddr.} = state.systems[system]
+  if Active in sys.flags:
+    state.energyUsed[sys.kind] -= sys.realSystem.chargeEnergyCost
+    None
+  else:
+    AlreadyUnpowered
+
+proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
+  let sys {.byaddr.} = state.systems[system]
+  if sys.chargeAmount >= sys.realSystem.chargeTurns:
+    sys.flags.incl CombatSystemFlag.Fire
+    None
+  else:
+    NotEnoughPower
+
+proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractError =
+  let sys {.byaddr.} = state.systems[system]
+  sys.flags.excl CombatSystemFlag.Fire
+  None
 
 
 proc endTurn*(combat: Combat) =
-  for system in combat.entityToCombat[combat.turnOrder.peekFirst()].systems.mvalues:
+  let nextState = combat.entityToCombat[combat.turnOrder.peekFirst()]
+  for system in nextState.systems.mvalues:
     if Active in system.flags:
       inc system.chargeAmount
+      if system.chargeAmount == system.realSystem.chargeTurns:
+        system.flags.excl Active
+        system.flags.incl Charged
+        nextState.energyUsed[system.kind] += system.realSystem.chargeEnergyCost
 
   for state in combat.entityToCombat.values:
     for action in state.actions.mitems:
       dec action.turnsToImpact
       action.handle(state)
-
-
-
 
 
   combat.turnOrder.addLast(combat.activeEntity)
