@@ -58,6 +58,7 @@ type
     Powered
     Jammed
     Toggled
+    Targetable
 
   System* = ref object # yet another ref, my cache coherency will cry
     name*: InsensitiveString

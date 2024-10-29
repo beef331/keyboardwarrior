@@ -37,10 +37,12 @@ type
 
 
   CombatSystem = object
-    kind: CombatSystemKind
-    realSystem: System
+    kind*: CombatSystemKind
+    realSystem*: System
     flags: set[CombatSystemFlag]
     chargeAmount*: int # amount of turns charged
+    targetSystem*: InsensitiveString
+    target*: ControlledEntity
 
 
   ActionEffect = enum
@@ -169,12 +171,12 @@ proc init*(world: var World, playerName, seed: string) =
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
           systems: @[
-            System(name: insStr"Sensor Array", kind: Sensor, sensorRange: 50),
+            System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
-            System(name: insStr"Warp Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
+            System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
             System(name: insStr"WBay1", kind: WeaponBay),
             System(name: insStr"Drill1", kind: ToolBay),
-            System(name: insStr"BasicStorage", kind: Inventory, maxWeight: 1000),
+            System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
           ]
       )
     )
@@ -194,7 +196,21 @@ proc init*(world: var World, playerName, seed: string) =
           asteroid.resources.add InventoryItem(entry: ores[int ore], amount: world.randState.rand(100))
         asteroid
       else:
-        SpaceEntity(name: startLocation.nextName("testerino"), kind: Station)
+        SpaceEntity(
+          name: startLocation.nextName("testerino"),
+          kind: Ship,
+          shipData:
+            ShipData(
+              glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
+              systems: @[
+                System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
+                System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
+                System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
+                System(name: insStr"Guass-Cannon", kind: WeaponBay),
+                System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
+              ]
+          )
+        )
     startLocation.add entity
 
 
@@ -245,7 +261,7 @@ func entityExists*(world: World, locationId: LocationId, name: InsensitiveString
     if x.name == name:
       return true
 
-func findCombatWith*(world: var World, entity: ControlledEntity): Combat =
+func findCombatWith*(world: World, entity: ControlledEntity): Combat =
   for combat in world.locations[entity.location.int].combats:
     if entity in combat.entityToCombat:
       return combat
@@ -271,8 +287,11 @@ func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
     result.maxShield += system.maxShield
 
 
-  for system in entity.systemsOf({WeaponBay}):
-    discard
+  for system in entity.systemsOf(NotSystem.default()):
+    result.systems[system.name] = CombatSystem(
+      kind: Weapons,
+      realSystem: system,
+    )
 
 
 func enterCombat*(world: var World, initiator: ControlledEntity, target: string) =
@@ -293,7 +312,7 @@ func enterCombat*(world: var World, initiator: ControlledEntity, target: string)
     world.locations[initiator.location.int].combats.add Combat(
       entityToCombat: {
         initiator: CombatState(entity: initiator).startCombat(world.getEntity(initiator)),
-        theTarget: CombatState(entity: theTarget).startCombat(world.getEntity(initiator))
+        theTarget: CombatState(entity: theTarget).startCombat(world.getEntity(theTarget))
       }.toTable(),
       turnOrder: [initiator, theTarget].toDeque()
     )
@@ -319,6 +338,14 @@ iterator entitiesIn*(world: var World, id: LocationId, filter: set[EntityKind] =
   for ent in world.locations[id.int].entities.mitems:
     if ent.kind in filter:
       yield ent
+
+proc hasSystemNamed*(combat: CombatState, name: InsensitiveString): bool = name in combat.systems
+
+proc combatHasEntityNamed*(world: World, combat: Combat, name: InsensitiveString, target: var CombatState): bool =
+  for entity, state in combat.entityToCombat.pairs:
+    if world.getEntity(entity).name == name:
+      target = state
+      return true
 
 proc handle(action: Action, combatState: CombatState) =
   if action.turnsToImpact <= 0:

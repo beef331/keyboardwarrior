@@ -8,9 +8,17 @@ type
   Combat = object
   Fire = object
   Energy = object
+  Target = object
+  Activate = object
+
+proc istr(input: string; target: var string, start: int): int =
+  while start + result < input.len and input[result + start] notin WhiteSpace:
+    target.add input[result + start]
+    inc result
 
 proc handler(_: Combat, gameState: var GameState, input: string) =
-  if (var (success, target) = input.scanTuple("$s$+"); success):
+  var target = ""
+  if input.scanf("$s${istr}", target):
     target.strip()
     if gameState.hasEntity(target, {Ship, Station}):
       gameState.world.enterCombat(gameState.activeShip, target)
@@ -73,11 +81,14 @@ proc printCurrentEnergy(gameState: var GameState) =
 
 
 proc handler(_: Energy, gameState: var GameState, input: string) =
-  var errored = false
+  var
+    errored = false
+    energy: string
+    amount: int
   if input.isEmptyOrWhitespace():
     discard
 
-  elif (var (success, energy, amount) = input.scanTuple("$s$+ $i"); success):
+  elif input.scanf("$s${istr}$s$i", energy, amount):
     try:
       let
         power = insensitiveParseEnum[CombatSystemKind](energy)
@@ -122,3 +133,70 @@ proc help(_: Energy): string = "Adjust energy level of systems"
 proc manual(_: Energy): string = ""
 
 storeCommand Energy().toTrait(CommandImpl), {InCombat}
+
+
+proc handler(_: Target, gameState: var GameState, input: string) =
+  var weaponName, shipName, systemName: string
+  if input.scanf("$s${istr}$s${istr}$s${istr}", weaponName, shipName, systemName):
+    let
+      combat = gameState.world.findCombatWith(gameState.activeShip)
+      state = combat.entityToCombat[gameState.activeShip]
+    if not state.hasSystemNamed(InsensitiveString weaponName):
+      gameState.writeError(fmt"Cannot provide a target to non existent: {weaponName}.")
+      return
+    var targetState: CombatState
+    if not gameState.world.combatHasEntityNamed(combat, InsensitiveString shipName, targetState):
+      gameState.writeError(fmt"No entity in encounter named {shipName}.")
+      return
+    if not targetState.hasSystemNamed(InsensitiveString systemName):
+      gameState.writeError(fmt"Target {shipName} does not have a system named {systemName}.")
+
+    state.systems[InsensitiveString weaponName].target = targetState.entity
+    state.systems[InsensitiveString weaponName].targetSystem = InsensitiveString systemName
+
+  else:
+    gameState.writeError("Expected: target thisShipSystem entityName systemName")
+
+
+proc suggest(_: Target, gameState: GameState, input: string, ind: var int): string =
+  case input.suggestIndex()
+  of 0, 1:
+    iterator targetableSystems(gameState: GameState): string =
+      let
+        combat = gameState.world.findCombatWith(gameState.activeShip)
+        state = combat.entityToCombat[gameState.activeShip]
+      for system in state.systems.values:
+        if system.kind == Weapons:
+          yield system.realSystem.name
+    suggestNext(gameState.targetableSystems(), input, ind)
+  of 2:
+    iterator entitiesInCombat(gameState: GameState): string =
+      let combat = gameState.world.findCombatWith(gameState.activeShip)
+      for entity in combat.entityToCombat.keys:
+        if entity != gameState.activeShip:
+          yield gameState.world.getEntity(entity).name
+    suggestNext(gameState.entitiesInCombat(), input, ind)
+  of 3:
+    iterator entitiesInCombat(gameState: GameState, input: string): string =
+      var systemName, targetName: string
+      discard input.scanf("$s${istr}$s${istr}", systemName, targetName)
+      targetName.strip()
+      systemName.strip()
+
+      let combat = gameState.world.findCombatWith(gameState.activeShip)
+      var targetState: CombatState
+      discard gameState.world.combatHasEntityNamed(combat, InsensitiveString targetName, targetState)
+
+      for system in targetState.systems.values:
+        yield system.realSystem.name
+
+    suggestNext(gameState.entitiesInCombat(input), input, ind)
+
+  else:
+    ""
+
+proc name(_: Target): string = "target"
+proc help(_: Target): string = "Sets the target of a weapon or tool to an entity's specific system.'"
+proc manual(_: Target): string = ""
+
+storeCommand Target().toTrait(CommandImpl), {InCombat}
