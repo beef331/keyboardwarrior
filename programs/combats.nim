@@ -1,7 +1,7 @@
 {.used.}
 import gamestates
 import std/[strscans, setutils, strbasics, strformat, strutils, tables]
-import "$projectdir"/data/[spaceentity, insensitivestrings, worlds]
+import "$projectdir"/data/[spaceentity, insensitivestrings, worlds, inventories]
 import "$projectdir"/utils/todoer
 
 type
@@ -22,7 +22,7 @@ proc handler(_: Combat, gameState: var GameState, input: string) =
     target.strip()
     if gameState.hasEntity(target, {Ship, Station}):
       gameState.world.enterCombat(gameState.activeShip, target)
-      let combat = gameState.world.findCombatWith(gameState.activeShip)
+      let combat = gameState.activeCombat()
       gamestate.buffer.put "Entered combat with: "
       for state in combat.entityToCombat.values:
         if state.entity != gameState.activeShip:
@@ -59,7 +59,7 @@ storeCommand Combat().toTrait(CommandImpl), {InWorld}
 
 proc printCurrentEnergy(gameState: var GameState) =
   let
-    combat = gameState.world.findCombatWith(gameState.activeShip)
+    combat = gameState.activeCombat()
     combatState = combat.entityToCombat[gameState.activeShip]
 
   const color = [
@@ -92,7 +92,7 @@ proc handler(_: Energy, gameState: var GameState, input: string) =
     try:
       let
         power = insensitiveParseEnum[CombatSystemKind](energy)
-        combat = gameState.world.findCombatWith(gameState.activeShip)
+        combat = gameState.activeCombat()
         combatState = combat.entityToCombat[gameState.activeShip]
         maxEnergyForSystem = combatState.energyDistribution[power] + combatState.energyCount
 
@@ -139,15 +139,22 @@ proc handler(_: Target, gameState: var GameState, input: string) =
   var weaponName, shipName, systemName: string
   if input.scanf("$s${istr}$s${istr}$s${istr}", weaponName, shipName, systemName):
     let
-      combat = gameState.world.findCombatWith(gameState.activeShip)
+      combat = gameState.activeCombat()
       state = combat.entityToCombat[gameState.activeShip]
+
     if not state.hasSystemNamed(InsensitiveString weaponName):
-      gameState.writeError(fmt"Cannot provide a target to non existent: {weaponName}.")
+      gameState.writeError(fmt"Cannot provide a target to non existent system: {weaponName}.")
       return
+
+    if Targetable notin state.systems[InsensitiveString weaponName].realSystem.flags:
+      gameState.writeError(fmt"{weaponName} is not a targetable system")
+      return
+
     var targetState: CombatState
     if not gameState.world.combatHasEntityNamed(combat, InsensitiveString shipName, targetState):
       gameState.writeError(fmt"No entity in encounter named {shipName}.")
       return
+
     if not targetState.hasSystemNamed(InsensitiveString systemName):
       gameState.writeError(fmt"Target {shipName} does not have a system named {systemName}.")
 
@@ -163,15 +170,15 @@ proc suggest(_: Target, gameState: GameState, input: string, ind: var int): stri
   of 0, 1:
     iterator targetableSystems(gameState: GameState): string =
       let
-        combat = gameState.world.findCombatWith(gameState.activeShip)
+        combat = gameState.activeCombat()
         state = combat.entityToCombat[gameState.activeShip]
       for system in state.systems.values:
-        if system.kind == Weapons:
+        if Targetable in system.realSystem.flags:
           yield system.realSystem.name
     suggestNext(gameState.targetableSystems(), input, ind)
   of 2:
     iterator entitiesInCombat(gameState: GameState): string =
-      let combat = gameState.world.findCombatWith(gameState.activeShip)
+      let combat = gameState.activeCombat()
       for entity in combat.entityToCombat.keys:
         if entity != gameState.activeShip:
           yield gameState.world.getEntity(entity).name
@@ -183,12 +190,11 @@ proc suggest(_: Target, gameState: GameState, input: string, ind: var int): stri
       targetName.strip()
       systemName.strip()
 
-      let combat = gameState.world.findCombatWith(gameState.activeShip)
+      let combat = gameState.activeCombat()
       var targetState: CombatState
-      discard gameState.world.combatHasEntityNamed(combat, InsensitiveString targetName, targetState)
-
-      for system in targetState.systems.values:
-        yield system.realSystem.name
+      if gameState.world.combatHasEntityNamed(combat, InsensitiveString targetName, targetState):
+        for system in targetState.systems.values:
+          yield system.realSystem.name
 
     suggestNext(gameState.entitiesInCombat(input), input, ind)
 
@@ -196,7 +202,61 @@ proc suggest(_: Target, gameState: GameState, input: string, ind: var int): stri
     ""
 
 proc name(_: Target): string = "target"
-proc help(_: Target): string = "Sets the target of a weapon or tool to an entity's specific system.'"
+proc help(_: Target): string = "Sets the target of a weapon or tool to an entity's specific system."
 proc manual(_: Target): string = ""
 
 storeCommand Target().toTrait(CommandImpl), {InCombat}
+
+
+proc handler(_: Fire, gameState: var GameState, input: string) =
+  var systemName: InsensitiveString
+  if input.scanf("$s${istr}", string(systemName)):
+    let
+      combat = gameState.activeCombat()
+      state = combat.entityToCombat[gameState.activeShip]
+    if systemName notin state.systems:
+      gameState.writeError(fmt"Cannot fire non existent system named {systemName}")
+      return
+
+
+    case (let fireState = state.systems[systemName].fireState(); fireState)
+    of NoTarget:
+      gameState.writeError($fireState)
+    of InsufficientlyCharged:
+      gameState.writeError($fireState % $state.systems[systemName].turnsTillCharged())
+    of None:
+      {.warning: "Print out the target we're targetting".}
+      let fireError = state.fire(systemName)
+      if fireError != None:
+        gameState.writeError($fireError)
+      else:
+        gameState.buffer.put(fmt"Initiated firing sequence of {systemName}")
+        gameState.buffer.newLine()
+
+
+  else:
+    gameState.writeError("Expected: fire systemName")
+
+
+proc suggest(_: Fire, gameState: GameState, input: string, ind: var int): string =
+  case input.suggestIndex()
+  of 0, 1:
+    iterator fireableWeapons(gameState: GameState): string =
+      let
+        combat = gameState.activeCombat()
+        state = combat.entityToCombat[gameState.activeShip]
+
+      for name, system in state.systems.pairs:
+        if system.fireState == None:
+          yield name.string
+
+    suggestNext(gameState.fireableWeapons(), input, ind)
+
+  else:
+    ""
+
+proc name(_: Fire): string = "fire"
+proc help(_: Fire): string = "Fire the desired system."
+proc manual(_: Fire): string = ""
+
+storeCommand Fire().toTrait(CommandImpl), {InCombat}

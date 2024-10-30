@@ -28,11 +28,18 @@ type
     Fire # Do we fire at end of this turn
 
 
-  CombatInteractError = enum
+  CombatInteractError* = enum
     None
     AlreadyPowered = "The system is already powered."
     AlreadyUnpowered = "The system is already off."
     NotEnoughPower = "There is not enough power allocated for the system."
+    InsufficientlyCharged = "Lacking charge need to wait $# turns."
+
+  FireError* = enum
+    None
+    InsufficientlyCharged = $CombatInteractError
+    NoTarget = "Has no target"
+
 
 
 
@@ -174,7 +181,7 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
             System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
-            System(name: insStr"WBay1", kind: WeaponBay),
+            System(name: insStr"WBay1", kind: WeaponBay, flags: {Targetable}, activateCost: 2),
             System(name: insStr"Drill1", kind: ToolBay),
             System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
           ]
@@ -206,7 +213,7 @@ proc init*(world: var World, playerName, seed: string) =
                 System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
                 System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
                 System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
-                System(name: insStr"Guass-Cannon", kind: WeaponBay),
+                System(name: insStr"Guass-Cannon", kind: WeaponBay, flags: {Targetable}, activateCost: 0, chargeEnergyCost: 2, chargeTurns: 2),
                 System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
               ]
           )
@@ -374,16 +381,35 @@ proc powerOff*(state: CombatState, system: InsensitiveString): CombatInteractErr
   else:
     AlreadyUnpowered
 
+proc turnsTillCharged*(system: CombatSystem): int =
+  system.realSystem.chargeTurns - system.chargeAmount
+
+proc fireState*(system: CombatSystem): FireError =
+  if system.target == nil or system.targetSystem == InsensitiveString"":
+    NoTarget
+  elif system.turnsTillCharged() != 0:
+    InsufficientlyCharged
+  else:
+    None
+
+proc unusedPower(state: CombatState, kind: CombatSystemKind): int =
+  state.energyDistribution[kind] - state.energyUsed[kind]
+
 proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
-  if sys.chargeAmount >= sys.realSystem.chargeTurns:
-    sys.flags.incl CombatSystemFlag.Fire
-    None
-  else:
+  if sys.turnsTillCharged > 0:
+    InsufficientlyCharged
+  elif state.unusedPower(sys.kind) < sys.realSystem.activateCost:
     NotEnoughPower
+  else:
+    sys.flags.incl CombatSystemFlag.Fire
+    state.energyUsed[sys.kind] += sys.realSystem.activateCost
+    None
 
 proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
+  if Fire in sys.flags:
+    state.energyUsed[sys.kind] -= sys.realSystem.activateCost
   sys.flags.excl CombatSystemFlag.Fire
   None
 
