@@ -50,16 +50,17 @@ type
     chargeAmount*: int # amount of turns charged
     targetSystem*: InsensitiveString
     target*: ControlledEntity
+    combatState*: CombatState
 
 
   ActionEffect = enum
     Interrupt
+    Interruptable
 
 
   Action = object
     effects: set[ActionEffect]
-    damages: array[DamageKind, int]
-    damageAmount: int
+    damages: DamageDealt
     turnsToImpact: int
     targetSystem: InsensitiveString
     target: ControlledEntity
@@ -298,6 +299,7 @@ func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
     result.systems[system.name] = CombatSystem(
       kind: Weapons,
       realSystem: system,
+      combatState: result,
     )
 
 
@@ -354,14 +356,6 @@ proc combatHasEntityNamed*(world: World, combat: Combat, name: InsensitiveString
       target = state
       return true
 
-proc handle(action: Action, combatState: CombatState) =
-  if action.turnsToImpact <= 0:
-    let system = combatState.systems[action.targetSystem].realSystem
-    for kind, damage in action.damages:
-      system.currentHealth -= int(action.damageAmount.float32 * system.damageModifier[kind])
-    if Interrupt in action.effects:
-      combatState.systems[action.targetSystem].flags.excl Active
-
 proc powerOn*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
   if sys.realSystem.chargeEnergyCost >= state.energyUsed[sys.kind]:
@@ -414,20 +408,45 @@ proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractErr
   None
 
 
+proc handle(action: Action, combatState: CombatState): bool =
+  # returns true if it should be removed from the list
+  if action.turnsToImpact <= 0:
+    let system = combatState.systems[action.targetSystem].realSystem
+    for kind, damage in action.damages:
+      system.currentHealth -= int(action.damages[kind].float32 * system.damageModifier[kind])
+    if Interrupt in action.effects:
+      combatState.systems[action.targetSystem].flags.excl Active
+    true
+  else:
+    false
+
+
 proc endTurn*(combat: Combat) =
   let nextState = combat.entityToCombat[combat.turnOrder.peekFirst()]
   for system in nextState.systems.mvalues:
     if Active in system.flags:
       inc system.chargeAmount
-      if system.chargeAmount == system.realSystem.chargeTurns:
+      if system.turnsTillCharged() == 0:
         system.flags.excl Active
         system.flags.incl Charged
         nextState.energyUsed[system.kind] += system.realSystem.chargeEnergyCost
+    if Fire in system.flags:
+      system.combatState.actions.add Action(
+        damages: system.realSystem.damageDealt,
+        target: system.target,
+        targetSystem: system.targetSystem
+      )
+      nextState.energyUsed[system.kind] += system.realSystem.activateCost
+
 
   for state in combat.entityToCombat.values:
-    for action in state.actions.mitems:
+    var toRemove: seq[int]
+    for i, action in state.actions.mpairs:
       dec action.turnsToImpact
-      action.handle(state)
+      if action.handle(state):
+        toRemove.add i
+    for i in toRemove:
+      state.actions.delete(i)
 
 
   combat.turnOrder.addLast(combat.activeEntity)

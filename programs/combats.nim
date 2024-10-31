@@ -75,8 +75,9 @@ proc printCurrentEnergy(gameState: var GameState) =
   gameState.buffer.newline()
 
   for name, energy in combatState.energyDistribution:
-    gameState.buffer.put $name & " " & "■".repeat(energy), GlyphProperties(foreground: color[name])
-    gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name] * 0.25)
+    gameState.buffer.put $name & " " & "■".repeat(combatState.energyUsed[name]), GlyphProperties(foreground: color[name])
+    gameState.buffer.put "■".repeat(energy - combatState.energyUsed[name]), GlyphProperties(foreground: color[name] * 0.4)
+    gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name] * 0.1)
     gameState.buffer.newline()
 
 

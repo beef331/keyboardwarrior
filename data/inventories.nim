@@ -60,6 +60,9 @@ type
     Toggled
     Targetable
 
+  DamageModifiers* = array[DamageKind, float32]
+  DamageDealt* = array[DamageKind, int]
+
   System* = ref object # yet another ref, my cache coherency will cry
     name*: InsensitiveString
     flags*: set[SystemFlag] = {Powered}
@@ -69,8 +72,8 @@ type
     activateCost*: int # how many blocks does it cost
     chargeEnergyCost*: int # how many blocks does this cost to use
     chargeTurns*: int # how many turns does it take to charge?
-    damageModifier*: array[DamageKind, float32] = [Fire: 1f, 1, 1, 1]
-    damageDealt*: set[DamageKind]
+    damageModifier*: DamageModifiers = [Fire: 1f, 1, 1, 1] # How much damage do we take per type
+    damageDealt*: DamageDealt
 
     case kind*: SystemKind
     of Sensor:
