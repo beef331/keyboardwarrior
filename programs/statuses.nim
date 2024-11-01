@@ -1,63 +1,62 @@
 {.used.}
 import gamestates
-import ../data/[spaceentity, inventories]
-import ../screenutils/texttables
-
-proc powerFormat(i: int): string = $i & "kw"
+import ../data/[spaceentity, inventories, worlds, insensitivestrings]
+import ../screenutils/[texttables, progressbars]
+import std/[strutils, strformat, tables]
 
 type
-  StatusEntry = object
+  CombatStatusEntry = object
     name: string
-    powered: bool
+    health: int
     status: string
-  StatusCommand = object
+  CombatStatus = object
 
-proc status(sys: inventories.System): string =
-  case sys.kind
-  of WeaponBay:
-    if Jammed in sys.flags:
-      "Jammed"
-    elif Toggled in sys.flags:
-      "Firing"
-    else:
-      ""
+proc status(sys: inventories.System): string = discard
+
+proc printStatus(gameState: var GameState, combatState: CombatState) =
+  gameState.buffer.put(gameState.world.getEntity(combatState.entity).name)
+  gameState.buffer.newLine()
+  var data: seq[CombatStatusEntry]
+  gameState.buffer.put("Hull: ")
+  gameState.buffer.put($combatState.hull)
+  gameState.buffer.progressbar(combatState.hull / combatState.maxHull, 10, gradient = [(GlyphProperties(foreground: parseHtmlColor"red"), 0f), (GlyphProperties(foreground: parseHtmlColor"lime"), 1f)])
+  gameState.buffer.newLine()
+
+  gameState.buffer.put("=".repeat(gamestate.buffer.lineWidth))
+  gameState.buffer.newLine()
+
+  for name, system in combatState.systems.pairs:
+    gameState.buffer.put(name & ": " & $system.realSystem.currentHealth)
+    gameState.buffer.progressbar(system.realSystem.currentHealth / system.realSystem.maxHealth, 10, gradient = [(GlyphProperties(foreground: parseHtmlColor"red"), 0f), (GlyphProperties(foreground: parseHtmlColor"lime"), 1f)])
+    gameState.buffer.newLine()
+
+
+
+
+proc handler(_: CombatStatus, gameState: var GameState, input: string) =
+  if input.isEmptyOrWhiteSpace():
+    gameState.printStatus(gameState.activeCombat.entityToCombat[gameState.activeShip])
   else:
-    ""
-
-proc handler(_: StatusCommand, gameState: var GameState, input: string) =
-  var
-    entries: seq[StatusEntry]
-    props: seq[GlyphProperties]
-  for system in gameState.activeShipEntity.shipData.systems:
-    entries.add StatusEntry(
-      name: system.name,
-      powered: Powered in system.flags,
-      status: system.status,
-      )
-
     let
-      powerColour =
-        if entries[^1].powered:
-          GlyphProperties(foreGround: parseHtmlColor"lime")
-        else:
-          GlyphProperties(foreGround: parseHtmlColor"red")
+      name = input.strip()
+      combat = gameState.activeCombat
+
+    var foundTheTarget = false
+
+    for ship in combat.entityToCombat.keys:
+      if gameState.getEntity(ship).name == name:
+        gameState.printStatus(combat.entityToCombat[ship])
+        foundTheTarget = true
+        break
+
+    if not foundTheTarget:
+      gameState.writeError(fmt"No entity named: {name}")
 
 
-    props.add [
-      gameState.buffer.properties,
-      powerColour,
-      gameState.buffer.properties
-    ]
 
-  gameState.buffer.printTable(
-    entries,
-    entryProperties = props
-  )
+proc name(_: CombatStatus): string = "status"
+proc help(_: CombatStatus): string = "Prints out a cursory status of the ship"
+proc manual(_: CombatStatus): string = ""
+proc suggest(_: CombatStatus, gameState: GameState, input: string, ind: var int): string = discard
 
-
-proc name(_: StatusCommand): string = "status"
-proc help(_: StatusCommand): string = "Prints out a cursory status of the ship"
-proc manual(_: StatusCommand): string = ""
-proc suggest(_: StatusCommand, gameState: GameState, input: string, ind: var int): string = discard
-
-storeCommand StatusCommand().toTrait(CommandImpl)
+storeCommand CombatStatus().toTrait(CommandImpl), {InCombat}

@@ -68,7 +68,7 @@ type
 
   CombatState* = ref object
     hull*: int
-    maxHull: int
+    maxHull*: int
     shield*: int
     maxShield*: int
     energyUsed*: array[CombatSystemKind, int]
@@ -175,6 +175,8 @@ proc init*(world: var World, playerName, seed: string) =
       kind: Ship,
       name: playerName,
       x: 500,
+      currentHull: 100,
+      maxHull: 100,
       shipData:
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
@@ -182,7 +184,7 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
             System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
-            System(name: insStr"WBay1", kind: WeaponBay, flags: {Targetable}, activateCost: 2),
+            System(name: insStr"Laser-Turret", kind: WeaponBay, flags: {Targetable}, activateCost: 2, damageDealt: [Fire: 3, 0, 0, 0]),
             System(name: insStr"Drill1", kind: ToolBay),
             System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
           ]
@@ -207,6 +209,8 @@ proc init*(world: var World, playerName, seed: string) =
         SpaceEntity(
           name: startLocation.nextName("testerino"),
           kind: Ship,
+          currentHull: 100,
+          maxHull: 100,
           shipData:
             ShipData(
               glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
@@ -408,12 +412,13 @@ proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractErr
   None
 
 
-proc handle(action: Action, combatState: CombatState): bool =
+proc handle(action: Action, combat: Combat, combatState: CombatState): bool =
   # returns true if it should be removed from the list
   if action.turnsToImpact <= 0:
-    let system = combatState.systems[action.targetSystem].realSystem
+    let system = combat.entityToCombat[action.target].systems[action.targetSystem].realSystem
     for kind, damage in action.damages:
       system.currentHealth -= int(action.damages[kind].float32 * system.damageModifier[kind])
+
     if Interrupt in action.effects:
       combatState.systems[action.targetSystem].flags.excl Active
     true
@@ -443,7 +448,7 @@ proc endTurn*(combat: Combat) =
     var toRemove: seq[int]
     for i, action in state.actions.mpairs:
       dec action.turnsToImpact
-      if action.handle(state):
+      if action.handle(combat, state):
         toRemove.add i
     for i in toRemove:
       state.actions.delete(i)

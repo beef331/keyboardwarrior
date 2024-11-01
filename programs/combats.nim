@@ -7,6 +7,7 @@ import "$projectdir"/utils/todoer
 type
   Combat = object
   Fire = object
+  TurnEnd = object
   Energy = object
   Target = object
   Activate = object
@@ -261,3 +262,16 @@ proc help(_: Fire): string = "Fire the desired system."
 proc manual(_: Fire): string = ""
 
 storeCommand Fire().toTrait(CommandImpl), {InCombat}
+
+
+proc handler(_: TurnEnd, gameState: var GameState, input: string) =
+  gameState.activeCombat.endTurn()
+
+proc suggest(_: TurnEnd, gameState: GameState, input: string, ind: var int): string =
+  ""
+
+proc name(_: TurnEnd): string = "endturn"
+proc help(_: TurnEnd): string = "ends the current turn"
+proc manual(_: TurnEnd): string = ""
+
+storeCommand TurnEnd().toTrait(CommandImpl), {InCombat}
