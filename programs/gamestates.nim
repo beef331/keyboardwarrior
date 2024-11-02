@@ -205,9 +205,8 @@ export programutils
 import
   helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands, combats
 
-proc splitVertical(gameState: var GameState, screen: Screen) =
+proc split(gameState: var GameState, screen: Screen, action: ScreenAction) =
   screen.action = Nothing
-  screen.buffer.setLineWidth screen.buffer.lineWidth div 2
   var buff = Buffer(
     lineWidth: screen.buffer.lineWidth,
     lineHeight: screen.buffer.lineHeight
@@ -217,70 +216,34 @@ proc splitVertical(gameState: var GameState, screen: Screen) =
   buff.showCursor(0)
 
   var oldScreen = move screen[]
-  let origWidth = oldScreen.w
-  oldScreen.w = oldScreen.w / 2
   let newScreen = Screen(
       kind: NoSplit,
-      x: oldScreen.x + oldScreen.w,
+      buffer: buff,
+      shipStack: oldScreen.shipStack,
+    )
+  {.cast(uncheckedAssign).}:
+    screen[] = ScreenObj(
+      kind:
+        if action == SplitV:
+          ScreenKind.SplitV
+        else:
+          ScreenKind.SplitH
+      ,
+      x: oldScreen.x,
       y: oldScreen.y,
       w: oldScreen.w,
       h: oldScreen.h,
-      buffer: buff,
-      shipStack: oldScreen.shipStack,
+      left: Screen(),
+      right: newScreen,
+      parent: oldScreen.parent,
+      splitPercentage: oldScreen.splitPercentage
     )
-  screen[] = ScreenObj(
-    kind: SplitV,
-    x: oldScreen.x,
-    y: oldScreen.y,
-    w: origWidth,
-    h: oldScreen.h,
-    left: Screen(),
-    right: newScreen,
-    parent: oldScreen.parent
-  )
   screen.left[] = oldScreen
   screen.left.parent = screen
   screen.right.parent = screen
   gameState.screen = screen.left
   inc gameState.screenCount
-
-proc splitHorizontal(gameState: var GameState, screen: Screen) =
-  screen.action = Nothing
-  screen.buffer.setLineHeight screen.buffer.lineHeight div 2
-  var buff = Buffer(
-    lineWidth: screen.buffer.lineWidth,
-    lineHeight: screen.buffer.lineHeight,
-  )
-  buff.initFrom(gamestate.screen.buffer)
-  buff.put(ShellCarrot)
-  buff.showCursor(0)
-  var oldScreen = move screen[]
-  let origHeight = oldScreen.h
-  oldScreen.h = oldScreen.h / 2
-  let newScreen = Screen(
-      kind: NoSplit,
-      x: oldScreen.x,
-      y: oldScreen.y + oldScreen.h,
-      w: oldScreen.w,
-      h: oldScreen.h,
-      buffer: buff,
-      shipStack: oldScreen.shipStack,
-    )
-  screen[] = ScreenObj(
-    kind: SplitH,
-    x: oldScreen.x,
-    y: oldScreen.y,
-    w: oldScreen.w,
-    h: origHeight,
-    left: Screen(),
-    right: newScreen,
-    parent: oldScreen.parent
-  )
-  screen.left[] = oldScreen
-  screen.left.parent = screen
-  screen.right.parent = screen
-  gameState.screen = screen.left
-  inc gameState.screenCount
+  screen.recalculate()
 
 
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
@@ -575,10 +538,8 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
       gameState.screen = oldScreen
       case screen.action
-      of SplitV:
-        gameState.splitVertical(screen)
-      of SplitH:
-        gameState.splitHorizontal(screen)
+      of SplitV, SplitH:
+        gameState.split(screen, screen.action)
       of Close:
         gameState.closeScreen(screen)
       of Nothing:

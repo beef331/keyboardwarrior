@@ -24,6 +24,7 @@ type
   Screen* = ref object
     x*, y*, w*, h*: float32
     parent*: Screen
+    splitPercentage*: float32 = 1f
     case kind*: ScreenKind
     of NoSplit:
       buffer*: Buffer
@@ -38,6 +39,7 @@ type
     of SplitH, SplitV:
       left*: Screen
       right*: Screen
+
 
   ScreenObj* = typeof(Screen()[])
 
@@ -64,23 +66,25 @@ proc recalculate*(screen: Screen) =
         splitHMod = 1f - splitVMod
 
       screen.left.x = screen.x
-      screen.right.x = screen.x + (screen.w / 2) * splitVMod
+      screen.right.x = screen.x + (screen.w * screen.splitPercentage) * splitVMod
 
       screen.left.y = screen.y
-      screen.right.y = screen.y + (screen.h / 2) * splitHMod
+      screen.right.y = screen.y + (screen.h * screen.splitPercentage) * splitHMod
 
 
-      screen.left.h = screen.h - (screen.h / 2) * splitHMod
-      screen.right.h = screen.h - (screen.h / 2) * splitHMod
+      screen.left.h = screen.h - (screen.h * splitHMod * (1 - screen.splitPercentage))
+      screen.right.h = screen.h - (screen.h * splitHMod * screen.splitPercentage)
 
-      screen.left.w = screen.w - (screen.w / 2) * splitVMod
-      screen.right.w = screen.w - (screen.w / 2) * splitVMod
+      screen.left.w = screen.w - (screen.w * splitVMod * (1 - screen.splitPercentage))
+      screen.right.w = screen.w - (screen.w * splitVMod * screen.splitPercentage)
+
 
       screens.add screen.left
       screens.add screen.right
     of NoSplit:
-      screen.buffer.setLineWidth(int screen.w)
-      screen.buffer.setLineHeight(int screen.h)
+      if screen.w != 0 and screen.h != 0:
+        screen.buffer.setLineWidth(int screen.w)
+        screen.buffer.setLineHeight(int screen.h)
 
 proc focus*(root, currentScreen: Screen, dir: FocusDirection): Screen =
   var
