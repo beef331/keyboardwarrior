@@ -41,6 +41,10 @@ type
     NoTarget = "Has no target"
 
 
+  ChargeState* = enum
+    NotChargable
+    NotCharged
+    FullyCharged
 
 
   CombatSystem = object
@@ -185,6 +189,7 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
             System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
             System(name: insStr"Laser-Turret", kind: WeaponBay, flags: {Targetable}, activateCost: 2, damageDealt: [Fire: 3, 0, 0, 0]),
+            System(name: insStr"Guass-Cannon", kind: WeaponBay, flags: {Targetable}, activateCost: 2, damageDealt: [Fire: 4, 0, 0, 0], chargeTurns: 2, chargeEnergyCost: 1),
             System(name: insStr"Drill1", kind: ToolBay),
             System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
           ]
@@ -327,7 +332,8 @@ func enterCombat*(world: var World, initiator: ControlledEntity, target: string)
         initiator: CombatState(entity: initiator).startCombat(world.getEntity(initiator)),
         theTarget: CombatState(entity: theTarget).startCombat(world.getEntity(theTarget))
       }.toTable(),
-      turnOrder: [initiator, theTarget].toDeque()
+      turnOrder: [initiator, theTarget].toDeque(),
+      activeEntity: initiator
     )
     world.locations[theTarget.location.int].entities[theTarget.entryId].state = InCombat
 
@@ -352,6 +358,10 @@ iterator entitiesIn*(world: var World, id: LocationId, filter: set[EntityKind] =
     if ent.kind in filter:
       yield ent
 
+
+proc unusedPower(state: CombatState, kind: CombatSystemKind): int =
+  state.energyDistribution[kind] - state.energyUsed[kind]
+
 proc hasSystemNamed*(combat: CombatState, name: InsensitiveString): bool = name in combat.systems
 
 proc combatHasEntityNamed*(world: World, combat: Combat, name: InsensitiveString, target: var CombatState): bool =
@@ -362,7 +372,7 @@ proc combatHasEntityNamed*(world: World, combat: Combat, name: InsensitiveString
 
 proc powerOn*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
-  if sys.realSystem.chargeEnergyCost >= state.energyUsed[sys.kind]:
+  if state.unusedPower(sys.kind) < sys.realSystem.chargeEnergyCost:
     NotEnoughPower
   elif Active in sys.flags:
     AlreadyPowered
@@ -390,8 +400,14 @@ proc fireState*(system: CombatSystem): FireError =
   else:
     None
 
-proc unusedPower(state: CombatState, kind: CombatSystemKind): int =
-  state.energyDistribution[kind] - state.energyUsed[kind]
+proc chargeState*(combatSystem: CombatSystem): ChargeState =
+  if combatSystem.realSystem.chargeTurns == 0:
+    NotChargable
+  elif combatSystem.turnsTillCharged() != 0:
+    NotCharged
+  else:
+    FullyCharged
+
 
 proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
@@ -434,14 +450,15 @@ proc endTurn*(combat: Combat) =
       if system.turnsTillCharged() == 0:
         system.flags.excl Active
         system.flags.incl Charged
-        nextState.energyUsed[system.kind] += system.realSystem.chargeEnergyCost
+        nextState.energyUsed[system.kind] -= system.realSystem.chargeEnergyCost
+
     if Fire in system.flags:
       system.combatState.actions.add Action(
         damages: system.realSystem.damageDealt,
         target: system.target,
         targetSystem: system.targetSystem
       )
-      nextState.energyUsed[system.kind] += system.realSystem.activateCost
+      nextState.energyUsed[system.kind] -= system.realSystem.activateCost
 
 
   for state in combat.entityToCombat.values:
@@ -452,7 +469,6 @@ proc endTurn*(combat: Combat) =
         toRemove.add i
     for i in toRemove:
       state.actions.delete(i)
-
 
   combat.turnOrder.addLast(combat.activeEntity)
   combat.activeEntity = combat.turnOrder.popFirst()

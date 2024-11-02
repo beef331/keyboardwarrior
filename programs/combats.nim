@@ -77,7 +77,9 @@ proc printCurrentEnergy(gameState: var GameState) =
 
   for name, energy in combatState.energyDistribution:
     gameState.buffer.put $name & " " & "■".repeat(combatState.energyUsed[name]), GlyphProperties(foreground: color[name])
-    gameState.buffer.put "■".repeat(energy - combatState.energyUsed[name]), GlyphProperties(foreground: color[name] * 0.4)
+    let chargesUsed = energy - combatState.energyUsed[name]
+    if chargesUsed > 0:
+      gameState.buffer.put "■".repeat(energy - combatState.energyUsed[name]), GlyphProperties(foreground: color[name] * 0.4)
     gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name] * 0.1)
     gameState.buffer.newline()
 
@@ -275,3 +277,56 @@ proc help(_: TurnEnd): string = "ends the current turn"
 proc manual(_: TurnEnd): string = ""
 
 storeCommand TurnEnd().toTrait(CommandImpl), {InCombat}
+
+
+
+proc handler(_: Activate, gameState: var GameState, input: string) =
+  var weaponName: string
+  if input.scanf("$s${istr}", weaponName):
+    let
+      combat = gameState.activeCombat()
+      state = combat.entityToCombat[gameState.activeShip]
+
+    if not state.hasSystemNamed(InsensitiveString weaponName):
+      gameState.writeError(fmt"Cannot activate a non existent system: {weaponName}.")
+      return
+
+    let system = state.systems[InsensitiveString weaponName]
+
+    case system.chargeState()
+    of FullyCharged:
+      gameState.writeError("Cannot charge system further")
+    of NotCharged:
+      let error = state.powerOn(InsensitiveString weaponName)
+      if error == NotEnoughPower:
+        gameState.writeError($error)
+    else:
+      gameState.writeError("Not a chargable system.")
+
+
+  else:
+    gameState.writeError("Expected: active weapon")
+
+proc suggest(_: Activate, gameState: GameState, input: string, ind: var int): string =
+  case input.suggestIndex()
+  of 0, 1:
+    iterator chargableWeapons(gameState: GameState): string =
+      let
+        combat = gameState.activeCombat()
+        state = combat.entityToCombat[gameState.activeShip]
+
+      for name, system in state.systems.pairs:
+        if system.chargeState == NotCharged:
+          yield name.string
+
+    suggestNext(gameState.chargableWeapons(), input, ind)
+
+  else:
+    ""
+
+
+proc name(_: Activate): string = "activate"
+proc help(_: Activate): string = "Powers on a system"
+proc manual(_: Activate): string = ""
+
+storeCommand Activate().toTrait(CommandImpl), {InCombat}
