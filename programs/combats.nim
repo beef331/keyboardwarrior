@@ -1,15 +1,28 @@
 {.used.}
 import gamestates
-import std/[strscans, setutils, strbasics, strformat, strutils, tables]
+import std/[strscans, setutils, strbasics, strformat, strutils, tables, enumerate]
 import "$projectdir"/data/[spaceentity, insensitivestrings, worlds, inventories]
 import "$projectdir"/utils/todoer
+import pkg/truss3D
 
 type
   Combat = object
   Fire = object
   TurnEnd = object
   Energy = object
+
+  TargettingState = enum
+    WeaponSelect
+    EntitySelect
+
   Target = object
+    selecting: TargettingState
+    weaponSelection: int
+    entitySelection: int
+    targetSelection: int
+    entity: SpaceEntity
+    target: InsensitiveString
+
   Activate = object
 
 proc istr(input: string; target: var string, start: int): int =
@@ -139,73 +152,123 @@ proc manual(_: Energy): string = ""
 storeCommand Energy().toTrait(CommandImpl), {InCombat}
 
 
-proc handler(_: Target, gameState: var GameState, input: string) =
-  var weaponName, shipName, systemName: string
-  if input.scanf("$s${istr}$s${istr}$s${istr}", weaponName, shipName, systemName):
-    let
-      combat = gameState.activeCombat()
-      state = combat.entityToCombat[gameState.activeShip]
+proc onExit(_: var Target, gameState: var GameState) = discard
+proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
+  let theState = gameState.activeCombatState()
+  if TakeInput in flags:
+    case targ.selecting
+    of WeaponSelect:
+      let targetableCount = theState.targetableCount()
+      if truss.inputs.isDownRepeating(KeycodeDown):
+        targ.weaponSelection = (targ.weaponSelection - 1 + targetableCount) mod targetableCount
+      if truss.inputs.isDownRepeating(KeycodeUp):
+        targ.weaponSelection = (targ.weaponSelection + 1 + targetableCount) mod targetableCount
+      if truss.inputs.isDown(KeycodeReturn):
+        targ.selecting = EntitySelect
 
-    if not state.hasSystemNamed(InsensitiveString weaponName):
-      gameState.writeError(fmt"Cannot provide a target to non existent system: {weaponName}.")
-      return
+    of EntitySelect:
+      let entityCount = gameState.activeCombat().entityToCombat.len
+      if truss.inputs.isDownRepeating(KeycodeLeft):
+        targ.entitySelection = (targ.entitySelection - 1 + entityCount) mod entityCount
+        targ.targetSelection = 0
+      if truss.inputs.isDownRepeating(KeycodeRight):
+        targ.entitySelection = (targ.entitySelection + 1 + entityCount) mod entityCount
+        targ.targetSelection = 0
 
-    if Targetable notin state.systems[InsensitiveString weaponName].realSystem.flags:
-      gameState.writeError(fmt"{weaponName} is not a targetable system")
-      return
+      var targetCount = 0
+      for i, combat in enumerate gameState.activeCombat().entityToCombat.values:
+        if i == targ.entitySelection:
+          targetCount = combat.systems.len
+          break
 
-    var targetState: CombatState
-    if not gameState.world.combatHasEntityNamed(combat, InsensitiveString shipName, targetState):
-      gameState.writeError(fmt"No entity in encounter named {shipName}.")
-      return
+      if truss.inputs.isDownRepeating(KeycodeUp):
+        targ.targetSelection = (targ.targetSelection - 1 + targetCount) mod targetCount
+      if truss.inputs.isDownRepeating(KeycodeDown):
+        targ.targetSelection = (targ.targetSelection + 1 + targetCount) mod targetCount
 
-    if not targetState.hasSystemNamed(InsensitiveString systemName):
-      gameState.writeError(fmt"Target {shipName} does not have a system named {systemName}.")
 
-    state.systems[InsensitiveString weaponName].target = targetState.entity
-    state.systems[InsensitiveString weaponName].targetSystem = InsensitiveString systemName
 
-  else:
-    gameState.writeError("Expected: target thisShipSystem entityName systemName")
+  if Draw in flags:
+    case targ.selecting:
+    of WeaponSelect:
+      var i = 0
+      for name, system in theState.systems.pairs:
+        if Targetable in system.realSystem.flags:
+          let
+            colorModifier = (i != targ.weaponSelection).float32 * 0.5
+            textProps = GlyphProperties(foreground: gameState.buffer.properties.foreground - colorModifier)
+          var nameAligned = name.string.alignLeft(15)
+          nameAligned.setLen(15)
 
+          gameState.buffer.put(
+            nameAligned,
+            textProps
+          )
+
+          gameState.buffer.newLine()
+
+          gameState.buffer.put("|Damage: ", textProps)
+          gameState.buffer.newLine()
+
+          const damageColors = [
+              DamageKind.Fire: parseHtmlColor"Red",
+              parseHtmlColor"Blue",
+              parseHtmlColor"Cyan",
+              parseHtmlColor"White",
+            ]
+
+          for name, damage in system.realSystem.damageDealt:
+            gameState.buffer.put("|", textProps)
+            gameState.buffer.put("|" & $name &  ": "  & $damage, GlyphProperties(foreground: damageColors[name] - colorModifier))
+            gameState.buffer.newLine()
+
+
+          gameState.buffer.put("|Charge cost: ", textProps)
+
+          gameState.buffer.put(
+            "■".repeat(system.realSystem.chargeEnergyCost),
+            GlyphProperties(foreground: parseHtmlColor("orange") - colorModifier)
+          )
+
+          gameState.buffer.newLine()
+          gameState.buffer.put("|Activate cost: ", textProps)
+
+          gameState.buffer.put(
+            "■".repeat(system.realSystem.activateCost),
+            GlyphProperties(foreground: parseHtmlColor("orange") - colorModifier)
+          )
+
+          gameState.buffer.newLine()
+          gameState.buffer.put "-".repeat(gameState.buffer.lineWidth)
+          gameState.buffer.newLine()
+
+          inc i
+    else:
+      let combat = gameState.activeCombat()
+      for i, entity, state in enumerate combat.entityToCombat.pairs:
+        if i == targ.entitySelection:
+          gameState.buffer.put("<")
+          gamestate.buffer.put(gameState.world.getEntity(entity).name.string.center(gameState.buffer.lineWidth - 2))
+          gameState.buffer.put(">")
+          gameState.buffer.newLine()
+
+          for j, system in enumerate state.systems.values:
+            let
+              colorModifier = (j != targ.targetSelection).float32 * 0.5
+              textProps = GlyphProperties(foreground: gameState.buffer.properties.foreground - colorModifier)
+            gameState.buffer.put(system.realSystem.name.string, textProps)
+            gameState.buffer.newLine()
+
+
+
+
+proc getFlags(_: Target): set[ProgramFlag] = discard
 
 proc suggest(_: Target, gameState: GameState, input: string, ind: var int): string =
-  case input.suggestIndex()
-  of 0, 1:
-    iterator targetableSystems(gameState: GameState): string =
-      let
-        combat = gameState.activeCombat()
-        state = combat.entityToCombat[gameState.activeShip]
-      for system in state.systems.values:
-        if Targetable in system.realSystem.flags:
-          yield system.realSystem.name
-    suggestNext(gameState.targetableSystems(), input, ind)
-  of 2:
-    iterator entitiesInCombat(gameState: GameState): string =
-      let combat = gameState.activeCombat()
-      for entity in combat.entityToCombat.keys:
-        if entity != gameState.activeShip:
-          yield gameState.world.getEntity(entity).name
-    suggestNext(gameState.entitiesInCombat(), input, ind)
-  of 3:
-    iterator entitiesInCombat(gameState: GameState, input: string): string =
-      var systemName, targetName: string
-      discard input.scanf("$s${istr}$s${istr}", systemName, targetName)
-      targetName.strip()
-      systemName.strip()
-
-      let combat = gameState.activeCombat()
-      var targetState: CombatState
-      if gameState.world.combatHasEntityNamed(combat, InsensitiveString targetName, targetState):
-        for system in targetState.systems.values:
-          yield system.realSystem.name
-
-    suggestNext(gameState.entitiesInCombat(input), input, ind)
-
-  else:
-    ""
-
+  discard
 proc name(_: Target): string = "target"
+proc handler(_: Target, gameState: var GameState, input: string) =
+  gameState.enterProgram Target().toTrait(Program)
 proc help(_: Target): string = "Sets the target of a weapon or tool to an entity's specific system."
 proc manual(_: Target): string = ""
 

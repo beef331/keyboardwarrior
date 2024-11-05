@@ -102,6 +102,9 @@ proc activeShipEntity*(gameState: var GameState): var SpaceEntity =
 proc activeCombat*(gameState: GameState): Combat =
   gameState.world.findCombatWith(gameState.activeShip)
 
+proc activeCombatState*(gameState: GameState): CombatState =
+  gameState.world.findCombatWith(gameState.activeShip).entityToCombat[gameState.activeShip]
+
 proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
   (gameState.screen.programX, gameState.screen.programY) = gamestate.buffer.getPosition()
   gameState.buffer.clearTo(gameState.screen.programY)

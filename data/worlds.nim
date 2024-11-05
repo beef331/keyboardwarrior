@@ -389,8 +389,14 @@ proc powerOff*(state: CombatState, system: InsensitiveString): CombatInteractErr
   else:
     AlreadyUnpowered
 
+proc targetableCount*(state: CombatState): int =
+  for system in state.systems.values:
+    if Targetable in system.realSystem.flags:
+      inc result
+
 proc turnsTillCharged*(system: CombatSystem): int =
   system.realSystem.chargeTurns - system.chargeAmount
+
 
 proc fireState*(system: CombatSystem): FireError =
   if system.target == nil or system.targetSystem == InsensitiveString"":
