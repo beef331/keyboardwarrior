@@ -32,7 +32,7 @@ proc printStatus(gameState: var GameState, combatState: CombatState) =
     properties.add GlyphProperties(foreground: lerp(parseHtmlColor"red", parseHtmlColor"lime", sys.realSystem.currentHealth / sys.realSystem.maxHealth))
 
 
-  gameState.buffer.printTable(data, entryProperties = properties)
+  gameState.buffer.printTable(data)
 
 
 

@@ -98,6 +98,17 @@ type
     randState*: Rand
     inventoryItems: Table[InsensitiveString, InventoryEntry] # We do not want to remake InventoryItems so they're the same off reference
 
+proc `==`*(a, b: LocationId): bool = a.int == b.int
+
+proc `==`*(a, b: ControlledEntity): bool =
+  (a.isNil and b.isNil) or (not(a.isNil) and not(b.isNil) and a[] == b[])
+
+proc hash*(ent: ControlledEntity): Hash =
+  if ent.isNil:
+    hash(0)
+  else:
+    hash(ent[])
+
 proc nextName(loc: var Location, name: string): string =
   result = name
   let count = loc.nameCount.getOrDefault(name)
@@ -105,7 +116,6 @@ proc nextName(loc: var Location, name: string): string =
     result.add $count
 
   inc loc.nameCount, name
-
 
 proc nextLocationID(world: var World): LocationId =
   result = world.idCounter

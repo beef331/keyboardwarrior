@@ -3,7 +3,8 @@ import gamestates
 import std/[strscans, setutils, strbasics, strformat, strutils, tables, enumerate]
 import "$projectdir"/data/[spaceentity, insensitivestrings, worlds, inventories]
 import "$projectdir"/utils/todoer
-import pkg/truss3D
+import "$projectdir"/screenutils/[styledtexts, texttables]
+import pkg/[truss3D, chroma]
 
 type
   Combat = object
@@ -152,6 +153,16 @@ proc manual(_: Energy): string = ""
 storeCommand Energy().toTrait(CommandImpl), {InCombat}
 
 
+proc chargeIndicator(i: int): StyledText =
+  styledText("<text foreground=orange>" & "■".repeat(i) & "</text>")
+
+type WeaponDialog = object
+  name: string
+  damage: DamageDealt
+  chargeTurns {.tableStringify: chargeIndicator.}: int
+  chargeCost {.tableStringify: chargeIndicator.}: int
+  activateCost {.tableStringify: chargeIndicator.}: int
+
 proc onExit(_: var Target, gameState: var GameState) = discard
 proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   let theState = gameState.activeCombatState()
@@ -191,58 +202,24 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
   if Draw in flags:
     case targ.selecting:
     of WeaponSelect:
-      var i = 0
+      var weapons: seq[WeaponDialog]
       for name, system in theState.systems.pairs:
         if Targetable in system.realSystem.flags:
-          let
-            colorModifier = (i != targ.weaponSelection).float32 * 0.5
-            textProps = GlyphProperties(foreground: gameState.buffer.properties.foreground - colorModifier)
-          var nameAligned = name.string.alignLeft(15)
-          nameAligned.setLen(15)
-
-          gameState.buffer.put(
-            nameAligned,
-            textProps
+          weapons.add WeaponDialog(
+            name: name.string,
+            damage: system.realSystem.damageDealt,
+            chargeTurns: system.realSystem.chargeTurns,
+            chargeCost: system.realSystem.chargeEnergyCost,
+            activateCost: system.realSystem.activateCost
           )
 
-          gameState.buffer.newLine()
+      gameState.buffer.printPaged(
+        weapons,
+        targ.weaponSelection,
+        proc(props: var GlyphProperties) =
+          props.foreground = props.foreground * 0.3f
 
-          gameState.buffer.put("|Damage: ", textProps)
-          gameState.buffer.newLine()
-
-          const damageColors = [
-              DamageKind.Fire: parseHtmlColor"Red",
-              parseHtmlColor"Blue",
-              parseHtmlColor"Cyan",
-              parseHtmlColor"White",
-            ]
-
-          for name, damage in system.realSystem.damageDealt:
-            gameState.buffer.put("|", textProps)
-            gameState.buffer.put("|" & $name &  ": "  & $damage, GlyphProperties(foreground: damageColors[name] - colorModifier))
-            gameState.buffer.newLine()
-
-
-          gameState.buffer.put("|Charge cost: ", textProps)
-
-          gameState.buffer.put(
-            "■".repeat(system.realSystem.chargeEnergyCost),
-            GlyphProperties(foreground: parseHtmlColor("orange") - colorModifier)
-          )
-
-          gameState.buffer.newLine()
-          gameState.buffer.put("|Activate cost: ", textProps)
-
-          gameState.buffer.put(
-            "■".repeat(system.realSystem.activateCost),
-            GlyphProperties(foreground: parseHtmlColor("orange") - colorModifier)
-          )
-
-          gameState.buffer.newLine()
-          gameState.buffer.put "-".repeat(gameState.buffer.lineWidth)
-          gameState.buffer.newLine()
-
-          inc i
+        )
     else:
       let combat = gameState.activeCombat()
       for i, entity, state in enumerate combat.entityToCombat.pairs:

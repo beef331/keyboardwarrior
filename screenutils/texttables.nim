@@ -21,21 +21,26 @@
 # SOFTWARE.
 
 import std/[strutils, options, macros, sequtils, unicode, strbasics]
-import screenrenderer
+import screenrenderer, styledtexts
 
-proc alignRight*(s: string, count: Natural, padding = ' '): string =
-  if s.len < count:
-    result = padding.repeat(count - s.len)
-  result.add s
+proc alignRight*(s: StyledText, count: Natural, padding = ' '): StyledText =
+  result = s
+  result.fragments.insert(Fragment(msg: padding.repeat(count - result.len)), 0)
+  result.len = count
+
+proc alignLeft*(s: StyledText, count: Natural, padding = ' '): StyledText =
+  result = s
+  result.fragments.add(Fragment(msg: padding.repeat(count - result.len)))
+  result.len = count
 
 type
   TableKind* = enum
     NewLine
     Seperator
     Entry
-  AlignFunction* = typeof(alignRight)
+  AlignFunction* = proc(_: StyledText, _: Natural, padding: char): StyledText
 
-template tableName*(s: string){.pragma.}
+template tableName*(s: string or StyledText){.pragma.}
 template tableAlign*(_: AlignFunction){.pragma.}
 template tableStringify*(p: proc {.nimcall.}){.pragma.}
 template tableSkip*() {.pragma.}
@@ -65,11 +70,10 @@ proc toPrintedName(name: string): string =
 
 iterator tableEntries*[T](
   values: openArray[T],
-  defaultProperties, headerProperties: GlyphProperties,
-  entryProperties: openArray[GlyphProperties]
-  ): tuple[msg: string, props: GlyphProperties, kind: TableKind] =
+  properties: GlyphProperties
+  ): tuple[msg: StyledText, kind: TableKind] =
   var
-    strings = newSeqOfCap[(string, GlyphProperties)](values.len * T.paramCount)
+    strings = newSeqOfCap[StyledText](values.len * T.paramCount)
     largest = newSeq[int](T.paramCount)
     alignFunctions = newSeqWith(T.paramCount, alignRight)
 
@@ -78,7 +82,7 @@ iterator tableEntries*[T](
     when not field.hasCustomPragma(tableSkip):
       let nameStr =
         when field.hasCustomPragma(tableName):
-          field.getCustomPragmaVal(tableName)
+          field.getCustomPragmaVal(tableName)[0]
         else:
           const val = static: name.toPrintedName()
           val
@@ -87,7 +91,11 @@ iterator tableEntries*[T](
         alignFunctions[fieldInd] = field.getCustomPragmaVal(tableAlign)
 
       largest[fieldInd] = nameStr.len
-      strings.add (nameStr, headerProperties)
+      strings.add:
+        when nameStr is StyledText:
+          nameStr
+        else:
+          StyledText(len: nameStr.runeLen, fragments: @[Fragment(msg: nameStr)])
       inc fieldInd
 
   var entryInd = 0
@@ -103,34 +111,33 @@ iterator tableEntries*[T](
 
 
         strings.add:
-          if entryInd < entryProperties.len:
-            (str, entryProperties[entryInd])
+          when str is StyledText:
+            str
           else:
-            (str, defaultProperties)
-        largest[fieldInd] = max(strings[^1][0].len, largest[fieldInd])
+            StyledText(len: str.runeLen, fragments: @[Fragment(msg: str)])
+
+        largest[fieldInd] = max(strings[^1].len, largest[fieldInd])
         inc entryInd
         inc fieldInd
 
   for i, entry in strings:
     let alignInd = i mod T.paramCount
-    yield (alignFunctions[alignInd](entry[0], largest[alignInd]), entry[1], Entry)
+    yield (alignFunctions[alignInd](entry, largest[alignInd]), Entry)
     if (i + 1) mod T.paramCount == 0:
-      yield ("", defaultProperties, NewLine)
+      yield (styledText"", NewLine)
     else:
-      yield ("", entry[1], Seperator)
+      yield (styledText"", Seperator)
 
 
 
 proc printTable*[T: object or tuple](
   buffer: var Buffer,
   table: openArray[T],
-  headerProperties = none(GlyphProperties),
-  entryProperties: openArray[GlyphProperties] = @[]
 ) =
-  for str, props, kind in table.tableEntries(buffer.properties, headerProperties.get(buffer.properties), entryProperties):
+  for str, kind in table.tableEntries(buffer.properties):
     case kind
     of Entry:
-      buffer.put(str, props)
+      buffer.put(str)
     of NewLine:
       buffer.newLine()
     of Seperator:
@@ -141,16 +148,19 @@ proc printPaged*[T: object or tuple](
   buffer: var Buffer,
   table: openArray[T],
   selected: int = -1,
-  headerProperties = none(GlyphProperties),
-  entryProperties: openArray[GlyphProperties] = @[]
+  unselectedModifier: proc(prop: var GlyphProperties) = nil,
+  selectedModifier: proc(prop: var GlyphProperties) = nil
 ) =
   var line = 0
   if selected != -1:
     buffer.put " " # Everything is offset
-  for str, props, kind in table.tableEntries(buffer.properties, headerProperties.get(buffer.properties), entryProperties):
+  for str, kind in table.tableEntries(buffer.properties):
     case kind
     of Entry:
-      buffer.put(str, props)
+      if selected + 1 == line:
+        buffer.put(str, modifier = selectedModifier)
+      else:
+        buffer.put(str, modifier = unselectedModifier)
     of NewLine:
       buffer.newLine()
       if selected != -1:
@@ -161,3 +171,4 @@ proc printPaged*[T: object or tuple](
       inc line
     of Seperator:
       buffer.put("|")
+

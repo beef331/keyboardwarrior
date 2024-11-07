@@ -279,9 +279,9 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
     theBg = buff.getColorIndex(prop.background)
     size =
       if entry.rect.w == 0:
-        buff.runeSize * scale / scrSize
+        buff.runeSize * (scale / scrSize)
       else:
-        entry.rect.wh * scale / scrSize
+        entry.rect.wh * (scale / scrSize)
 
   when offset:
     let
@@ -713,6 +713,7 @@ proc hideCursor*(buffer: var Buffer) =
 
 
 when isMainModule:
+  import texttables, styledtexts
   const clear = color(0, 0, 0, 0)
   var
     buff = Buffer(lineWidth: 40, lineHeight: 40, properties: GlyphProperties(foreground: parseHtmlColor"White", background: clear))
@@ -726,6 +727,14 @@ when isMainModule:
     buff.put("\nHello travllllllerrrrs", GlyphProperties(foreground: parseHtmlColor"Purple", background: parseHtmlColor"Beige", shakeSpeed: 5f, shakeStrength: 10f))
     buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"Red", blinkSpeed: 5f))
     buff.put("\n" & "―".repeat(30), GlyphProperties(foreground: parseHtmlColor"White", blinkSpeed: 1f))
+    buff.newLine()
+
+    type
+      MyEntry = object
+        a {.tableName: styledText"<text foreground=red sineStrength=10 sineSpeed=4>Test</text> yes", tableAlign: alignLeft.}: int
+        b: int
+    var a = [MyEntry(a: 100, b: 200), MyEntry(a: 100, b: 200), MyEntry(a: 100, b: 200)]
+    buff.printTable(a)
     buff.put("\n>")
 
   var textScale = 1f

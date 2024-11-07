@@ -296,7 +296,7 @@ proc init*(_: typedesc[GameState]): GameState =
   result.screenHeight = 60
 
   var buff = Buffer(lineWidth: result.screenWidth, lineHeight: result.screenHeight, properties: GlyphProperties(foreground: parseHtmlColor("White")))
-  buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+  buff.initResources("3270NerdFontMono-Regular.ttf", true, fontSize = 80)
   result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
   result.screen = result.rootScreen
   inc result.screenCount

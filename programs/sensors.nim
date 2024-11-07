@@ -58,7 +58,7 @@ proc update(sensor: var Sensor, gameState: var GameState, truss: var Truss, dt: 
       props.add gameState.buffer.properties
 
 
-    gameState.buffer.printPaged(entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)), entryProperties = props)
+    gameState.buffer.printPaged(entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)))
 
 proc handler(_: SensorCommand, gameState: var GameState, input: string) =
   if gameState.hasProgram "Sensor":
