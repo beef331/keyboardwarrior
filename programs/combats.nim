@@ -156,10 +156,31 @@ storeCommand Energy().toTrait(CommandImpl), {InCombat}
 proc chargeIndicator(i: int): StyledText =
   styledText("<text foreground=orange>" & "■".repeat(i) & "</text>")
 
+const
+  damageIcon = [
+    DamageKind.Fire: "󱠇",
+    "⚡",
+    "",
+    "",
+  ]
+  damageProps= [
+    DamageKind.Fire: GlyphProperties(foreground: parseHtmlColor"Orange"),
+    GlyphProperties(foreground: parseHtmlColor"Yellow"),
+    GlyphProperties(foreground: parseHtmlColor"Cyan"),
+    GlyphProperties(foreground: parseHtmlColor"Grey"),
+  ]
+
+proc damageFormat(d: DamageDealt): StyledText =
+  for name, damage in d.pairs:
+    result = result.add styledText(damageIcon[name], damageProps[name])
+    result = result.add styledText($damage & " ", damageProps[name])
+
+
+
 type WeaponDialog = object
   name: string
-  damage: DamageDealt
-  chargeTurns {.tableStringify: chargeIndicator.}: int
+  damage {.tableStringify: damageFormat.}: DamageDealt
+  chargeTurns {.tableStringify: chargeIndicator, tableName: "".}: int
   chargeCost {.tableStringify: chargeIndicator.}: int
   activateCost {.tableStringify: chargeIndicator.}: int
 
