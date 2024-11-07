@@ -173,16 +173,18 @@ const
 proc damageFormat(d: DamageDealt): StyledText =
   for name, damage in d.pairs:
     result = result.add styledText(damageIcon[name], damageProps[name])
-    result = result.add styledText($damage & " ", damageProps[name])
+    result = result.add styledText($damage, damageProps[name])
+    if name != DamageKind.high:
+      result = result.add styledText(" ")
 
 
 
 type WeaponDialog = object
-  name: string
+  name {.tableAlign: alignLeft.}: string
   damage {.tableStringify: damageFormat.}: DamageDealt
-  chargeTurns {.tableStringify: chargeIndicator, tableName: "".}: int
-  chargeCost {.tableStringify: chargeIndicator.}: int
-  activateCost {.tableStringify: chargeIndicator.}: int
+  chargeTurns {.tableStringify: chargeIndicator, tableName: "󱤤".}: int
+  chargeCost {.tableStringify: chargeIndicator, tableName: "󰟌".}: int
+  activateCost {.tableStringify: chargeIndicator, tableName: "󰲅".}: int
 
 proc onExit(_: var Target, gameState: var GameState) = discard
 proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
