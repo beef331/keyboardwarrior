@@ -145,11 +145,12 @@ proc printTable*[T: object or tuple](
 
 
 proc printPaged*[T: object or tuple](
-  buffer: var Buffer,
-  table: openArray[T],
-  selected: int = -1,
-  unselectedModifier: proc(prop: var GlyphProperties) = nil,
-  selectedModifier: proc(prop: var GlyphProperties) = nil
+  buffer: var Buffer;
+  table: openArray[T];
+  selected: int = -1;
+  printHeader: bool = true;
+  unselectedModifier: proc(prop: var GlyphProperties) = nil;
+  selectedModifier: proc(prop: var GlyphProperties) = nil;
 ) =
   var line = 0
   if selected != -1:
@@ -157,6 +158,9 @@ proc printPaged*[T: object or tuple](
   for str, kind in table.tableEntries(buffer.properties):
     case kind
     of Entry:
+      if not printHeader and line == 0:
+        continue
+
       if selected + 1 == line:
         buffer.put(str, modifier = selectedModifier)
       else:
@@ -170,5 +174,7 @@ proc printPaged*[T: object or tuple](
           buffer.put " "
       inc line
     of Seperator:
+      if not printHeader and line == 0:
+        continue
       buffer.put("|")
 

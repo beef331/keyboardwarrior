@@ -28,6 +28,8 @@ import watchedshaders
 
 export chroma
 
+const screenRendererLineLength {.strdefine.} = 256
+
 type
   FontRenderObj = object
     fg: int32
@@ -57,7 +59,7 @@ type
     properties: uint16 # uin16.high different properties, surely we'll never go that high
 
   Line = object
-    glyphs: array[128, Glyph]
+    glyphs: array[screenRendererLineLength, Glyph]
 
 iterator items(line: Line): Glyph =
   for glyph in line.glyphs:
@@ -173,13 +175,18 @@ proc getPropertyIndex(buff: var Buffer, prop: GlyphProperties): uint16 =
     buff.propToInd[prop] = ind
     return ind
 
-proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true, fontSize = 80) =
+proc initResources*(buff: var Buffer, font: Font, useFrameBuffer = false, seedNoise = true, fontSize = 80) =
   for field in buff.fields:
     when field is ref:
       new field
 
+  let font =
+    when font is Font:
+      font
+    else:
+      readFont(font)
 
-  buff.atlas[] = FontAtlas.init(1024f, 1024f, 5f, readFont(fontPath))
+  buff.atlas[] = FontAtlas.init(1024f, 1024f, 5f, font)
   buff.textShader = loadWatchedShader(guiVert, guiFrag)
   buff.graphicShader = loadWatchedShader(guiVert, shapeFrag)
   var modelData: MeshData[Vec2]
@@ -198,6 +205,10 @@ proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, 
   buff.useFrameBuffer = useFrameBuffer
   buff.recalculateBuffer()
   discard buff.getPropertyIndex(buff.properties)
+
+proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true, fontSize = 80) =
+  buff.initResources(readFont(fontPath), useFrameBuffer, seedNoise, fontSize)
+
 
 
 proc initFrom*(buff: var Buffer, source: Buffer, seedNoise = true) =

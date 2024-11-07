@@ -46,7 +46,7 @@ type
 
   WeaponKind* = enum
     Bullet
-    Guass
+    Gauss
     RocketVolley
     Missile
 
@@ -59,6 +59,8 @@ type
     Jammed
     Toggled
     Targetable
+    TargetSelf
+    TargetOther
 
   DamageModifiers* = array[DamageKind, float32]
   DamageDealt* = array[DamageKind, int]

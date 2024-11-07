@@ -292,11 +292,14 @@ proc focus(gameState: var Gamestate, dir: FocusDirection) =
   gameState.screen = gameState.rootScreen.focus(gameState.screen, dir)
 
 proc init*(_: typedesc[GameState]): GameState =
-  result.screenWidth = 80
-  result.screenHeight = 30
+  let
+    font = readFont("3270NerdFontMono-Regular.ttf")
+    fontBounds = font.layoutBounds("+")
+  result.screenWidth = 160
+  result.screenHeight = int(result.screenWidth.float32 * (fontBounds.x / fontBounds.y) * (9 / 16))
 
   var buff = Buffer(lineWidth: result.screenWidth, lineHeight: result.screenHeight, properties: GlyphProperties(foreground: parseHtmlColor("White")))
-  buff.initResources("3270NerdFontMono-Regular.ttf", true, fontSize = 80)
+  buff.initResources(font, true, fontSize = 80)
   result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
   result.screen = result.rootScreen
   inc result.screenCount

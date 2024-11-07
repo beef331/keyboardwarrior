@@ -47,7 +47,7 @@ type
     FullyCharged
 
 
-  CombatSystem = object
+  CombatSystem* = ref object
     kind*: CombatSystemKind
     realSystem*: System
     flags: set[CombatSystemFlag]
@@ -198,8 +198,8 @@ proc init*(world: var World, playerName, seed: string) =
             System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
             System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
-            System(name: insStr"Laser-Turret", kind: WeaponBay, flags: {Targetable}, activateCost: 2, damageDealt: [Fire: 3, 0, 0, 0]),
-            System(name: insStr"Gauss-Cannon", kind: WeaponBay, flags: {Targetable}, activateCost: 2, damageDealt: [Fire: 4, 0, 0, 0], chargeTurns: 2, chargeEnergyCost: 1),
+            System(name: insStr"Laser-Turret", kind: WeaponBay, flags: {Targetable, TargetOther}, activateCost: 2, damageDealt: [Fire: 3, 0, 0, 0]),
+            System(name: insStr"Gauss-Cannon", kind: WeaponBay, flags: {Targetable, TargetOther}, activateCost: 2, damageDealt: [Fire: 4, 0, 0, 0], chargeTurns: 2, chargeEnergyCost: 1),
             System(name: insStr"Drill1", kind: ToolBay),
             System(name: insStr"Basic-Storage", kind: Inventory, maxWeight: 1000),
           ]
@@ -424,6 +424,9 @@ proc chargeState*(combatSystem: CombatSystem): ChargeState =
   else:
     FullyCharged
 
+proc canTarget*(combatSystem: CombatSystem, this, target: ControlledEntity): bool =
+  (TargetSelf in combatSystem.realSystem.flags and this == target) or
+  (TargetOther in combatSystem.realSystem.flags and this != target)
 
 proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]

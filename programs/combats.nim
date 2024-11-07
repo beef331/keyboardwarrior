@@ -18,6 +18,7 @@ type
 
   Target = object
     selecting: TargettingState
+    weaponSystem: CombatSystem
     weaponSelection: int
     entitySelection: int
     targetSelection: int
@@ -177,6 +178,17 @@ proc damageFormat(d: DamageDealt): StyledText =
     if name != DamageKind.high:
       result = result.add styledText(" ")
 
+proc modifierFormat(d: DamageModifiers): StyledText =
+  for name, damage in d.pairs:
+    result = result.add styledText(damageIcon[name], damageProps[name])
+    result = result.add styledText($damage & "x", damageProps[name])
+    if name != DamageKind.high:
+      result = result.add styledText(" ")
+
+proc healthFormat(health: (int, int)): StyledText =
+  result = result.add styledText($health[0], GlyphProperties(foreground: mix(parseHtmlColor"red", parseHtmlColor"lime", health[0] / health[1])))
+  result = result.add styledText"/"
+  result = result.add styledText($health[1], GlyphProperties(foreground: parseHtmlColor"lime"))
 
 
 type WeaponDialog = object
@@ -185,6 +197,12 @@ type WeaponDialog = object
   chargeTurns {.tableStringify: chargeIndicator, tableName: "󱤤".}: int
   chargeCost {.tableStringify: chargeIndicator, tableName: "󰟌".}: int
   activateCost {.tableStringify: chargeIndicator, tableName: "󰲅".}: int
+
+
+type TargetDialog = object
+  name {.tableAlign: alignLeft.}: string
+  damageModifier {.tableStringify: modifierFormat.}: DamageModifiers
+  health {.tableStringify: healthFormat.}: (int, int)
 
 proc onExit(_: var Target, gameState: var GameState) = discard
 proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
@@ -201,7 +219,11 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
         targ.selecting = EntitySelect
 
     of EntitySelect:
-      let entityCount = gameState.activeCombat().entityToCombat.len
+      var entityCount = 0
+      for entity in gameState.activeCombat().entityToCombat.keys:
+        if targ.weaponSystem.canTarget(gameState.activeShip, entity):
+          inc entityCount
+
       if truss.inputs.isDownRepeating(KeycodeLeft):
         targ.entitySelection = (targ.entitySelection - 1 + entityCount) mod entityCount
         targ.targetSelection = 0
@@ -209,17 +231,36 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
         targ.entitySelection = (targ.entitySelection + 1 + entityCount) mod entityCount
         targ.targetSelection = 0
 
-      var targetCount = 0
-      for i, combat in enumerate gameState.activeCombat().entityToCombat.values:
-        if i == targ.entitySelection:
-          targetCount = combat.systems.len
-          break
+      var
+        targetCount = 0
+        i = 0
+      for entity, combat in gameState.activeCombat().entityToCombat.pairs:
+        if targ.weaponSystem.canTarget(gameState.activeShip, entity):
+          if i == targ.entitySelection:
+            targetCount = combat.systems.len
+            break
+          inc i
 
       if truss.inputs.isDownRepeating(KeycodeUp):
         targ.targetSelection = (targ.targetSelection - 1 + targetCount) mod targetCount
       if truss.inputs.isDownRepeating(KeycodeDown):
         targ.targetSelection = (targ.targetSelection + 1 + targetCount) mod targetCount
 
+      if truss.inputs.isDown(KeycodeReturn):
+        let combat = gameState.activeCombat()
+        var i = 0
+        for entity, state in combat.entityToCombat.pairs:
+          if targ.weaponSystem.canTarget(gameState.activeShip, entity):
+            if i == targ.entitySelection:
+              targ.weaponSystem.target = entity
+              for j, name in enumerate state.systems.keys:
+                if j == targ.targetSelection:
+                  targ.weaponSystem.targetSystem = name
+                  break
+              break
+            inc i
+
+        reset targ
 
 
   if Draw in flags:
@@ -228,6 +269,7 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
       var weapons: seq[WeaponDialog]
       for name, system in theState.systems.pairs:
         if Targetable in system.realSystem.flags:
+          targ.weaponSystem = system
           weapons.add WeaponDialog(
             name: name.string,
             damage: system.realSystem.damageDealt,
@@ -239,25 +281,53 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
       gameState.buffer.printPaged(
         weapons,
         targ.weaponSelection,
-        proc(props: var GlyphProperties) =
+        unselectedModifier = proc(props: var GlyphProperties) =
           props.foreground = props.foreground * 0.3f
 
         )
     else:
       let combat = gameState.activeCombat()
-      for i, entity, state in enumerate combat.entityToCombat.pairs:
-        if i == targ.entitySelection:
-          gameState.buffer.put("<")
-          gamestate.buffer.put(gameState.world.getEntity(entity).name.string.center(gameState.buffer.lineWidth - 2))
-          gameState.buffer.put(">")
-          gameState.buffer.newLine()
-
-          for j, system in enumerate state.systems.values:
-            let
-              colorModifier = (j != targ.targetSelection).float32 * 0.5
-              textProps = GlyphProperties(foreground: gameState.buffer.properties.foreground - colorModifier)
-            gameState.buffer.put(system.realSystem.name.string, textProps)
+      var i = 0
+      for entity, state in combat.entityToCombat.pairs:
+        if targ.weaponSystem.canTarget(gameState.activeShip, entity):
+          if i == targ.entitySelection:
+            gameState.buffer.put("<")
+            gamestate.buffer.put(gameState.world.getEntity(entity).name.string.center(gameState.buffer.lineWidth - 2))
+            gameState.buffer.put(">")
             gameState.buffer.newLine()
+
+            let theSys = targ.weaponSystem
+
+            gameState.buffer.printPaged(
+              [
+                WeaponDialog(
+                  name: theSys.realSystem.name.string,
+                  damage: theSys.realSystem.damageDealt,
+                  chargeTurns: theSys.realSystem.chargeTurns,
+                  chargeCost: theSys.realSystem.chargeEnergyCost,
+                  activateCost: theSys.realSystem.activateCost
+                  )
+              ],
+              printHeader = false
+            )
+
+
+            var targetEntries: seq[TargetDialog]
+            for name, system in state.systems.pairs:
+              targetEntries.add TargetDialog(
+                name: name.string,
+                damageModifier: system.realSystem.damageModifier,
+                health: (system.realSystem.currentHealth, system.realSystem.maxHealth)
+              )
+
+            gameState.buffer.printPaged(
+              targetEntries,
+              targ.targetSelection,
+              unselectedModifier = proc(props: var GlyphProperties) =
+                props.foreground = props.foreground * 0.3f
+            )
+
+          inc i
 
 
 
