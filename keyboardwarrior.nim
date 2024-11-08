@@ -59,13 +59,15 @@ proc draw(truss: var Truss) =
 
     let
       scrSize = truss.windowSize.vec2
-      scale = min(scrSize.x / gameState.screenWidth.float32, scrSize.y / gameState.screenHeight.float32)
-      sizeX = (scale * screen.w)
-      sizeY = (scale * screen.h)
+      runeWidth = gameState.buffer.runeSize.x
+      runeHeight = gameState.buffer.runeSize.y
+      scale = min(scrSize.x / (gameState.screenWidth.float32 * runeWidth), scrSize.y / (gameState.screenHeight.float32 * runeHeight))
+      sizeX = (scale * screen.w * runeWidth)
+      sizeY = (scale * screen.h * runeHeight)
       size = vec2(sizeX, sizeY) / scrSize * 2 # times 2 cause the rect is only 0..1 but Opengl is -1..1
-      offset = abs(vec2(scale * gameState.screenWidth.float32, scale * gameState.screenHeight.float32) - scrSize) / scrSize
+      offset = abs(vec2(scale * gameState.screenWidth.float32 * runeWidth, scale * gameState.screenHeight.float32 * runeHeight) - scrSize) / scrSize
 
-    var pos = vec3(screen.x * scale, screen.y * scale, 1) / vec3(scrSize, 1)
+    var pos = vec3(screen.x * scale * runeWidth, screen.y * scale * runeHeight, 1) / vec3(scrSize, 1)
     pos.y *= -1
     pos.xy = pos.xy * 2f + vec2(-1f + offset.x, 1f - size.y - offset.y)
 

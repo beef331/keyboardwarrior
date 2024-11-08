@@ -64,4 +64,4 @@ proc help(_: EventPrinter): string = "A debug command that shows events"
 proc manual(_: EventPrinter): string = ""
 proc suggest(_: EventPrinter, gameState: GameState, input: string, ind: var int): string = discard
 
-storeCommand EventPrinter().toTrait(CommandImpl)
+storeCommand EventPrinter().toTrait(CommandImpl), {InWorld}

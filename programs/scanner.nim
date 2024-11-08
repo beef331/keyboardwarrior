@@ -46,4 +46,4 @@ proc suggest(_: Scanner, gameState: GameState, input: string, ind: var int): str
     ""
 
 
-storeCommand Scanner().toTrait(CommandImpl)
+storeCommand Scanner().toTrait(CommandImpl), {InWorld}

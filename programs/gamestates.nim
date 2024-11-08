@@ -1,7 +1,7 @@
 import ../screenutils/screenrenderer
-import ../data/[spaceentity, insensitivestrings]
+import ../data/[spaceentity, insensitivestrings, worlds]
 import pkg/[chroma, pixie, truss3D, traitor]
-import std/[tables, strutils, hashes, random]
+import std/[tables, strutils, hashes, random, setutils]
 import pkg/truss3D/[inputs]
 import screens
 
@@ -41,7 +41,9 @@ type
     screen*: Screen
     screenCount: int
 
-    programs: Table[string, Table[InsensitiveString, Traitor[Program]]]
+    programs: Table[ControlledEntity, Table[InsensitiveString, Traitor[Program]]]
+    entitySpecificCommands: Table[ControlledEntity, array[EntityState, Table[InsensitiveString, Traitor[CommandImpl]]]]
+
 
     history: seq[string]
     historyPos: int
@@ -64,16 +66,15 @@ type
 implTrait Program
 implTrait CommandImpl
 
-var handlers: Table[InsensitiveString, Command]
+var defaultHandlers*: array[EntityState, Table[InsensitiveString, Command]]
 
 iterator activeProgramsByName*(gameState: GameState): lent string =
-  if gameState.screen.shipStack[^1] in gamestate.programs:
-    for k, v in gameState.programs[gameState.screen.shipStack[^1]]:
+  let controlledEnt = gameState.screen.shipStack[^1]
+  if controlledEnt in gamestate.programs:
+    for k, v in gameState.programs[controlledEnt]:
       yield string(k)
 
-iterator commands*(gameState: GameState): Command =
-  for command in handlers.values:
-    yield command
+
 
 iterator screens*(gameState: var GameState): Screen =
   for screen in gameState.rootScreen.screens:
@@ -89,14 +90,20 @@ proc writeError*(gameState: var GameState, msg: string) =
   gameState.buffer.put(msg, GlyphProperties(foreground: parseHtmlColor"red"))
   gameState.buffer.newLine()
 
-proc activeShip*(gameState: GameState): lent string =
-  gameState.screen.shipStack[gameState.screen.shipStack.high]
+proc activeShip*(gameState: GameState): ControlledEntity =
+  gameState.screen.shipStack[^1]
 
 proc activeShipEntity*(gameState: GameState): lent SpaceEntity =
   gameState.world.getEntity(gameState.activeShip)
 
 proc activeShipEntity*(gameState: var GameState): var SpaceEntity =
   gameState.world.getEntity(gameState.activeShip)
+
+proc activeCombat*(gameState: GameState): Combat =
+  gameState.world.findCombatWith(gameState.activeShip)
+
+proc activeCombatState*(gameState: GameState): CombatState =
+  gameState.world.findCombatWith(gameState.activeShip).entityToCombat[gameState.activeShip]
 
 proc enterProgram*(gameState: var GameState, program: Traitor[Program]) =
   (gameState.screen.programX, gameState.screen.programY) = gamestate.buffer.getPosition()
@@ -132,23 +139,45 @@ proc exitProgram*(gameState: var GameState) =
 proc hasProgram*(gameState: var GameState, name: string): bool =
   gameState.activeShip in gameState.programs and name.InsensitiveString in gameState.programs[gameState.activeShip]
 
-proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in handlers
-proc getCommand*(gameState: var GameState, name: string): Command = handlers[InsensitiveString(name)]
+proc defaultCommands(gameState: GameState): lent Table[InsensitiveString, Command] =
+  defaultHandlers[gameState.activeShipEntity.state]
+
+
+iterator commands*(gameState: GameState): Command =
+  for command in gameState.defaultCommands().values:
+    yield command
+
+proc hasCommand*(gameState: var GameState, name: string): bool = InsensitiveString(name) in gameState.defaultCommands()
+proc getCommand*(gameState: var GameState, name: string): Command = gameState.defaultCommands()[InsensitiveString(name)]
 
 proc entityExists*(gameState: var GameState, name: string): bool =
-  gameState.world.entityExists(name)
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.entityExists(loc, name)
+
+proc getEntity*(gameState: GameState, entity: ControlledEntity): lent SpaceEntity =
+  gameState.world.getEntity(entity)
+
+proc getEntity*(gameState: var GameState, entity: ControlledEntity): var SpaceEntity =
+  gameState.world.getEntity(entity)
+
+proc hasEntity*(gameState: GameState, name: string, kind: set[EntityKind] = EntityKind.fullset): bool =
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.hasEntity(loc, name, kind)
 
 proc getEntity*(gameState: GameState, name: string): lent SpaceEntity =
-  gameState.world.getEntity(name)
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.getEntity(loc, name)
 
 proc getEntity*(gameState: var GameState, name: string): var SpaceEntity =
-  gameState.world.getEntity(name)
+  let loc = gamestate.screen.shipStack[^1].location
+  gameState.world.getEntity(loc, name)
 
 proc takeControlOf*(gameState: var GameState, name: string): bool =
   ## takes control of a ship returning true if it can be found and connected to
-  result = gameState.world.entityExists(name) and name != gameState.screen.shipStack[^1] # O(N) Send help!
+  let loc = gamestate.screen.shipStack[^1].location
+  result = gameState.world.entityExists(loc, name) and name != gamestate.activeShipEntity.name # O(N) Send help!
   if result:
-    gameState.screen.shipStack.add name
+    gameState.screen.shipStack.add ControlledEntity(location: loc, entryId: gamestate.world.getEntityId(loc, name))
     gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
 proc randState*(gameState: var GameState): var Rand = gameState.world.randState
@@ -177,13 +206,10 @@ import programutils
 export programutils
 
 import
-  helps, combats, eventprinter, hardwarehacksuite, manuals,
-  maps, sensors, shops, statuses, textconfig, locomotion, auxiliarycommands,
-  scanner
+  helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands, combats
 
-proc splitVertical(gameState: var GameState, screen: Screen) =
+proc split(gameState: var GameState, screen: Screen, action: ScreenAction) =
   screen.action = Nothing
-  screen.buffer.setLineWidth screen.buffer.lineWidth div 2
   var buff = Buffer(
     lineWidth: screen.buffer.lineWidth,
     lineHeight: screen.buffer.lineHeight
@@ -193,77 +219,34 @@ proc splitVertical(gameState: var GameState, screen: Screen) =
   buff.showCursor(0)
 
   var oldScreen = move screen[]
-  let origWidth = oldScreen.w
-  oldScreen.w = oldScreen.w / 2
   let newScreen = Screen(
       kind: NoSplit,
-      x: oldScreen.x + oldScreen.w,
+      buffer: buff,
+      shipStack: oldScreen.shipStack,
+    )
+  {.cast(uncheckedAssign).}:
+    screen[] = ScreenObj(
+      kind:
+        if action == SplitV:
+          ScreenKind.SplitV
+        else:
+          ScreenKind.SplitH
+      ,
+      x: oldScreen.x,
       y: oldScreen.y,
       w: oldScreen.w,
       h: oldScreen.h,
-      buffer: buff,
-      shipStack: oldScreen.shipStack,
+      left: Screen(),
+      right: newScreen,
+      parent: oldScreen.parent,
+      splitPercentage: oldScreen.splitPercentage
     )
-  screen[] = ScreenObj(
-    kind: SplitV,
-    x: oldScreen.x,
-    y: oldScreen.y,
-    w: origWidth,
-    h: oldScreen.h,
-    left: Screen(),
-    right: newScreen,
-    parent: oldScreen.parent
-  )
   screen.left[] = oldScreen
   screen.left.parent = screen
   screen.right.parent = screen
   gameState.screen = screen.left
   inc gameState.screenCount
-
-proc splitHorizontal(gameState: var GameState, screen: Screen) =
-  screen.action = Nothing
-  screen.buffer.setLineHeight screen.buffer.lineHeight div 2
-  var buff = Buffer(
-    lineWidth: screen.buffer.lineWidth,
-    lineHeight: screen.buffer.lineHeight,
-  )
-  buff.initFrom(gamestate.screen.buffer)
-  buff.put(ShellCarrot)
-  buff.showCursor(0)
-  var oldScreen = move screen[]
-  let origHeight = oldScreen.h
-  oldScreen.h = oldScreen.h / 2
-  let newScreen = Screen(
-      kind: NoSplit,
-      x: oldScreen.x,
-      y: oldScreen.y + oldScreen.h,
-      w: oldScreen.w,
-      h: oldScreen.h,
-      buffer: buff,
-      shipStack: oldScreen.shipStack,
-    )
-  screen[] = ScreenObj(
-    kind: SplitH,
-    x: oldScreen.x,
-    y: oldScreen.y,
-    w: oldScreen.w,
-    h: origHeight,
-    left: Screen(),
-    right: newScreen,
-    parent: oldScreen.parent
-  )
-  screen.left[] = oldScreen
-  screen.left.parent = screen
-  screen.right.parent = screen
-  gameState.screen = screen.left
-  inc gameState.screenCount
-
-
-handlers = block:
-  var res: Table[InsensitiveString, Command]
-  for x in getCommands():
-    res[InsensitiveString x.name()] = x
-  res
+  screen.recalculate()
 
 
 proc closeScreen(gameState: var Gamestate, screen: Screen) =
@@ -309,11 +292,14 @@ proc focus(gameState: var Gamestate, dir: FocusDirection) =
   gameState.screen = gameState.rootScreen.focus(gameState.screen, dir)
 
 proc init*(_: typedesc[GameState]): GameState =
-  result.screenWidth = 100
-  result.screenHeight = 60
+  let
+    font = readFont("3270NerdFontMono-Regular.ttf")
+    fontBounds = font.layoutBounds("+")
+  result.screenWidth = 160
+  result.screenHeight = int(result.screenWidth.float32 * (fontBounds.x / fontBounds.y) * (9 / 16))
 
   var buff = Buffer(lineWidth: result.screenWidth, lineHeight: result.screenHeight, properties: GlyphProperties(foreground: parseHtmlColor("White")))
-  buff.initResources("PublicPixel.ttf", true, fontSize = 80)
+  buff.initResources(font, true, fontSize = 80)
   result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
   result.screen = result.rootScreen
   inc result.screenCount
@@ -322,6 +308,9 @@ proc init*(_: typedesc[GameState]): GameState =
 proc clearSuggestion(gameState: var GameState) =
   gamestate.input.suggestion = ""
   gamestate.input.suggestionInd = -1
+
+proc entityCommands(gameState: GameState): lent Table[InsensitiveString, Command] =
+  gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state]
 
 proc takeSuggestion(gameState: var GameState) =
   gameState.input.str.add gameState.input.suggestion
@@ -341,11 +330,13 @@ proc dispatchCommand(gameState: var GameState) =
           ind - 1
         else:
           input.high
-      command = insStr input[0..ind]
+      command = InsensitiveString input[0..ind]
     gameState.buffer.newLine()
-    if command in handlers:
-      gameState.clearSuggestion()
-      handlers[command].handler(gameState, input[ind + 1 .. input.high])
+    gameState.clearSuggestion()
+    if command in gameState.defaultCommands():
+      gameState.defaultCommands()[command].handler(gameState, input[ind + 1 .. input.high])
+    elif gameState.activeShip in gamestate.entitySpecificCommands and command in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state]:
+      gameState.entityCommands[command].handler(gameState, input[ind + 1 .. input.high])
     else:
       gameState.writeError("Incorrect command")
 
@@ -361,12 +352,16 @@ proc suggest(gameState: var GameState) =
         else:
           input.high
       command = insStr input[0..ind]
-    if command in handlers:
-      gameState.input.suggestion = handlers[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
+    if command in gameState.defaultCommands():
+      gameState.input.suggestion = gameState.defaultCommands()[command].suggest(gameState, input[ind + 1 .. input.high], gameState.input.suggestionInd)
   else: # We search top level commands
     iterator handlerStrKeys(gameState: GameState): string =
-      for key in handlers.keys:
+      for key in gameState.defaultCommands().keys:
         yield string key
+      if gameState.activeShip in gameState.entitySpecificCommands:
+        for key in gameState.entitySpecificCommands[gameState.activeShip][gameState.activeShipEntity.state].keys:
+          yield string key
+
     gameState.input.suggestion = suggestNext(gameState.handlerStrKeys, input, gameState.input.suggestionInd)
 
 
@@ -440,6 +435,8 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
 
   if truss.inputs.isDownRepeating(KeycodeTab):
+    if truss.inputs.isPressed(KeyCodeLShift) or truss.inputs.isPressed(KeyCodeRShift):
+      dec gameState.input.suggestionInd, 2
     gameState.suggest()
     dirtyInput()
 
@@ -453,7 +450,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
     if truss.inputs.isDownRepeating(KeycodeReturn)and gameState.input.str.len > 0:
       let name = gameState.popInput()
-      gameState.screen.shipStack.add name
+      gameState.screen.shipStack.add ControlledEntity(location: LocationId(0), entryId: 0) # Player is always first entity made
       gameState.world.init(name, name) # TODO: Take a seed aswell
       gameState.buffer.clearTo(0)
       gameState.buffer.put ShellCarrot
@@ -547,10 +544,8 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
       gameState.screen = oldScreen
       case screen.action
-      of SplitV:
-        gameState.splitVertical(screen)
-      of SplitH:
-        gameState.splitHorizontal(screen)
+      of SplitV, SplitH:
+        gameState.split(screen, screen.action)
       of Close:
         gameState.closeScreen(screen)
       of Nothing:

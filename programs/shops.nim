@@ -100,7 +100,7 @@ proc update(shop: var Shop, gameState: var GameState, truss: var Truss, dt: floa
       props.add [prop, prop, prop]
 
 
-    gameState.buffer.printPaged(shopData.toOpenArray(objRange.a, objRange.b), pageRelativeInd, entryProperties = props)
+    gameState.buffer.printPaged(shopData.toOpenArray(objRange.a, objRange.b), pageRelativeInd)
     gameState.buffer.setPosition(0, gameState.buffer.getPosition()[1])
     gameState.buffer.put "Press Return to purchase.\n"
     gameState.buffer.put "Press S to toggle Selling.\n"

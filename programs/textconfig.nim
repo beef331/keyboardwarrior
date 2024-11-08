@@ -86,5 +86,5 @@ proc name(_: TextCommand): string = "text"
 proc help(_: TextCommand): string = "This command allows you to change the properties of the terminal text"
 proc manual(_: TextCommand): string = manualText
 
-storeCommand TextCommand().toTrait(CommandImpl)
+storeCommand TextCommand().toTrait(CommandImpl), {InWorld}
 

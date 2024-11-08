@@ -37,7 +37,7 @@ proc name(_: HeadingCommand): string = "heading"
 proc help(_: HeadingCommand): string = "Set the heading to the current location of an entity. Prints heading when not provided a target"
 proc manual(_: HeadingCommand): string = ""
 
-storeCommand HeadingCommand().toTrait(CommandImpl)
+storeCommand HeadingCommand().toTrait(CommandImpl), {InWorld}
 
 
 proc handler(_: SpeedCommand, gameState: var GameState, input: string) =
@@ -67,4 +67,4 @@ proc manual(_: SpeedCommand): string = ""
 proc suggest(_: SpeedCommand, gameState: GameState, input: string, ind: var int): string = ""
 
 
-storeCommand SpeedCommand().toTrait(CommandImpl)
+storeCommand SpeedCommand().toTrait(CommandImpl), {InWorld}

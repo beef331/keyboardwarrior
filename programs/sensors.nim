@@ -1,7 +1,7 @@
 {.used.}
 import gamestates
 import ../screenutils/texttables
-import ../data/spaceentity
+import ../data/[spaceentity, worlds]
 import std/[algorithm, strutils]
 import pkg/truss3D/inputs
 import pkg/truss3D
@@ -14,10 +14,6 @@ type
     page: int
   Entry = object
     name: string
-    x {.tableStringify(formatSpeed).}: float32
-    y {.tableStringify(formatSpeed).}: float32
-    distance {.tableStringify(formatSpeed).}: float32
-    speed {.tableStringify(formatSpeed).}: float32
     faction: Faction
   SensorCommand = object
 
@@ -34,22 +30,13 @@ proc update(sensor: var Sensor, gameState: var GameState, truss: var Truss, dt: 
       red = GlyphProperties(foreground: parseHtmlColor"red")
 
     var entries: seq[Entry]
-    let player = gameState.world.player
-    for entry in gameState.world.nonPlayerEntities:
-      let
-        deltaX = entry.x - player.x
-        deltaY = entry.y - player.y
-        dist = sqrt(deltaX * deltaX + deltaY * deltaY)
+    let player = gameState.activeShip
+    for entry in gameState.world.allInSensors(player):
       entries.add Entry(
         name: entry.name,
-        distance: dist,
-        x: entry.x,
-        y: entry.y,
-        speed: entry.velocity,
-        faction: entry.faction)
+        faction: entry.faction
+      )
 
-
-    entries = entries.sortedByIt(it.distance)
 
     if TakeInput in flags:
       if truss.inputs.isDownRepeating(KeyCodeDown):
@@ -67,20 +54,11 @@ proc update(sensor: var Sensor, gameState: var GameState, truss: var Truss, dt: 
     let currentEntry = sensor.page * entriesPerPage
 
     for entry in entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)):
-      if entry.faction == Alliance:
-        props.add red
-      else:
-        props.add nameProp
       props.add gameState.buffer.properties
       props.add gameState.buffer.properties
-      props.add gameState.buffer.properties
-      props.add gameState.buffer.properties
-      if entry.faction == Alliance:
-        props.add red
-      else:
-        props.add yellow
 
-    gameState.buffer.printPaged(entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)), entryProperties = props)
+
+    gameState.buffer.printPaged(entries.toOpenArray(currentEntry, min(entries.high, currentEntry + entriesPerPage)))
 
 proc handler(_: SensorCommand, gameState: var GameState, input: string) =
   if gameState.hasProgram "Sensor":

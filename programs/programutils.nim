@@ -1,7 +1,7 @@
-import std/[macros, os, strutils, macrocache]
+import std/[os, strutils, tables, setutils]
 import gamestates
-
-const storedCommands = CacheSeq"Commands"
+import "$projectdir"/data/[spaceentity, insensitivestrings]
+export EntityState
 
 proc insensitiveStartsWith*(a, b: openArray[char]): bool =
   if a.len < b.len:
@@ -45,10 +45,10 @@ proc suggestIndex*(input: string): int =
   if input.endsWith(' '):
     inc result
 
-macro storecommand*(expr: Command): untyped =
-  storedCommands.add expr
+proc storecommand*(cmd: Command, usableIn: set[EntityState] = EntityState.fullSet()) =
+  for state in usableIn:
+    defaultHandlers[state][cmd.name().InsensitiveString] = cmd
 
-macro getCommands*(): untyped =
-  result = nnkBracket.newTree()
-  for val in storedCommands:
-    result.add val
+
+
+

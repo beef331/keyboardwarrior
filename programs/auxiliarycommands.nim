@@ -36,7 +36,7 @@ proc handler(_: ExitCommand, gameState: var GameState, input: string) =
     gameState.screen.shipStack.setLen(1)
   elif gameState.screen.shipStack.len > 1:
     gameState.buffer.properties = gameState.getEntity(gameState.screen.shipStack[^2]).shipData.glyphProperties
-    gameState.buffer.put("Exited: " & gameState.activeShip & "\n")
+    gameState.buffer.put("Exited: " & gameState.activeShipEntity.name & "\n")
     gameState.screen.shipStack.setLen(gameState.screen.shipStack.high)
   else:
     gameState.buffer.put("Where do you want to go,")
@@ -49,7 +49,7 @@ proc handler(_: ExitCommand, gameState: var GameState, input: string) =
 
 proc suggest(_: ExitCommand, gs: GameState, input: string, ind: var int): string = discard
 
-storeCommand ExitCommand().toTrait(CommandImpl)
+storeCommand ExitCommand().toTrait(CommandImpl), {InWorld}
 
 proc name(_: ClearCommand): string = "clear"
 proc help(_: ClearCommand): string = "Clears the screen"
@@ -108,9 +108,16 @@ proc name(_: SplitVCommand): string = "splitv"
 proc help(_: SplitVCommand): string = "Splits the current terminal vertically. The left side maintains history"
 proc manual(_: SplitVCommand): string = ""
 proc handler(_: SplitVCommand, gameState: var GameState, input: string) =
-  if gameState.buffer.lineWidth div 2 < 10:
+  let size =
+    try:
+      parseFloat(input.strip())
+    except:
+      0.5
+
+  if gameState.buffer.lineWidth.float32 * size < 10:
     gameState.writeError("Cannot make the buffer, width would be too small")
     return
+  gameState.screen.splitPercentage = size
   gameState.screen.action = SplitV
 
 proc suggest(_: SplitVCommand, gs: GameState, input: string, ind: var int): string = discard
@@ -121,9 +128,16 @@ proc name(_: SplitHCommand): string = "splith"
 proc help(_: SplitHCommand): string = "Splits the current terminal horizontally. The top side maintains history"
 proc manual(_: SplitHCommand): string = ""
 proc handler(_: SplitHCommand, gameState: var GameState, input: string) =
-  if gameState.buffer.lineHeight div 2 < 10:
+  let size =
+    try:
+      parseFloat(input.strip())
+    except:
+      0.5
+
+  if gameState.buffer.lineHeight.float32 * size < 10:
     gameState.writeError("Cannot make the buffer, height would be too small")
     return
+  gameState.screen.splitPercentage = size
   gameState.screen.action = SplitH
 
 proc suggest(_: SplitHCommand, gs: GameState, input: string, ind: var int): string = discard
