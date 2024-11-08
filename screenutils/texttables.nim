@@ -156,11 +156,12 @@ proc printPaged*[T: object or tuple](
   if selected != -1:
     buffer.put " " # Everything is offset
   for str, kind in table.tableEntries(buffer.properties):
+    if not printHeader and line == 0:
+      if kind == NewLine:
+        inc line
+      continue
     case kind
     of Entry:
-      if not printHeader and line == 0:
-        continue
-
       if selected + 1 == line:
         buffer.put(str, modifier = selectedModifier)
       else:
@@ -174,7 +175,5 @@ proc printPaged*[T: object or tuple](
           buffer.put " "
       inc line
     of Seperator:
-      if not printHeader and line == 0:
-        continue
       buffer.put("|")
 

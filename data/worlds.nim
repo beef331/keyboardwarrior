@@ -399,9 +399,9 @@ proc powerOff*(state: CombatState, system: InsensitiveString): CombatInteractErr
   else:
     AlreadyUnpowered
 
-proc targetableCount*(state: CombatState): int =
+proc numberOfSystemsWithAny*(state: CombatState, flags: set[SystemFlag]): int =
   for system in state.systems.values:
-    if Targetable in system.realSystem.flags:
+    if flags * system.realSystem.flags != {}:
       inc result
 
 proc turnsTillCharged*(system: CombatSystem): int =
@@ -491,3 +491,15 @@ proc endTurn*(combat: Combat) =
 
   combat.turnOrder.addLast(combat.activeEntity)
   combat.activeEntity = combat.turnOrder.popFirst()
+
+
+iterator systemsWithAny*(combatState: CombatState, flags: set[Systemflag]): CombatSystem =
+  for sys in combatState.systems.values:
+    if flags * sys.realSystem.flags != {}:
+      yield sys
+
+
+iterator targetableEntities*(sys: CombatSystem, combat: Combat, this: ControlledEntity): ControlledEntity =
+  for entity in combat.entityToCombat.keys:
+    if sys.canTarget(this, entity):
+      yield entity
