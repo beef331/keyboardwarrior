@@ -77,8 +77,7 @@ proc styledText*(fragments: openArray[(string, GlyphProperties)]): StyledText =
     result.len += msg.runeLen
     result.fragments.add Fragment(msg: msg, usesRaw: true, props: prop)
 
-proc add*(styled: sink StyledText, toAdd: sink StyledText): StyledText =
-  result = styled
+proc add*(result: var StyledText, toAdd: sink StyledText) =
   result.len += toAdd.len
   result.fragments.add ensureMove toAdd.fragments
 

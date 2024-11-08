@@ -1,6 +1,6 @@
 {.used.}
 import gamestates
-import std/[strscans, setutils, strbasics, strformat, strutils, tables, enumerate]
+import std/[strscans, setutils, strbasics, strformat, strutils, tables, enumerate, options]
 import "$projectdir"/data/[spaceentity, insensitivestrings, worlds, inventories]
 import "$projectdir"/utils/todoer
 import "$projectdir"/screenutils/[styledtexts, texttables]
@@ -11,6 +11,7 @@ type
   Fire = object
   TurnEnd = object
   Energy = object
+    selected: int = 1
 
   TargettingState = enum
     WeaponSelect
@@ -73,81 +74,84 @@ proc manual(_: Combat): string = ""
 
 storeCommand Combat().toTrait(CommandImpl), {InWorld}
 
-proc printCurrentEnergy(gameState: var GameState) =
-  let
-    combat = gameState.activeCombat()
-    combatState = combat.entityToCombat[gameState.activeShip]
 
-  const color = [
-    Weapons: parseHtmlColor"orange",
-    Shields: parseHtmlColor"blue",
-    Logistics: parseHtmlColor"green",
-    Engines: parseHtmlColor"yellow",
-  ]
+const systemColor = [
+  Weapons: parseHtmlColor"orange",
+  Shields: parseHtmlColor"blue",
+  Logistics: parseHtmlColor"green",
+  Engines: parseHtmlColor"yellow",
+]
 
-
-  gameState.buffer.put "Unallocated " & "■".repeat(combatState.energyCount)
-  gameState.buffer.put "□".repeat(combatState.maxEnergyCount - combatState.energyCount), GlyphProperties(foreground: parseHtmlColor"grey")
-  gameState.buffer.newline()
-
-  for name, energy in combatState.energyDistribution:
-    gameState.buffer.put $name & " " & "■".repeat(combatState.energyUsed[name]), GlyphProperties(foreground: color[name])
-    let chargesUsed = energy - combatState.energyUsed[name]
-    if chargesUsed > 0:
-      gameState.buffer.put "■".repeat(energy - combatState.energyUsed[name]), GlyphProperties(foreground: color[name] * 0.4)
-    gameState.buffer.put "□".repeat(combatState.maxEnergyCount - energy),  GlyphProperties(foreground: color[name] * 0.1)
-    gameState.buffer.newline()
-
-
-proc handler(_: Energy, gameState: var GameState, input: string) =
-  var
-    errored = false
-    energy: string
-    amount: int
-  if input.isEmptyOrWhitespace():
-    discard
-
-  elif input.scanf("$s${istr}$s$i", energy, amount):
-    try:
-      let
-        power = insensitiveParseEnum[CombatSystemKind](energy)
-        combat = gameState.activeCombat()
-        combatState = combat.entityToCombat[gameState.activeShip]
-        maxEnergyForSystem = combatState.energyDistribution[power] + combatState.energyCount
-
-      if amount < 0:
-        errored = true
-        gameState.writeError("Cannot set the power to below zero.")
-      elif amount > maxEnergyForSystem:
-        errored = true
-        gameState.writeError(fmt"Cannot give the system more than {maxEnergyForSystem} with currrent energy distribution.")
-      else:
-        let toAdd = amount - combatState.energyDistribution[power]
-        combatState.energyDistribution[power] += toAdd
-        combatState.energyCount -= toAdd
-
-    except CatchableError:
-      errored = true
-      gameState.writeError("Expected {Shield | Weapon | Logistics | Engine}.")
+proc energyUsedFormat(data: tuple[kind: Option[CombatSystemKind], allocated, used, total: int]): StyledText =
+  let (kind, allocated, used, total) = data
+  if kind.isNone:
+    result.add "■".repeat(allocated).styledText()
+    result.add "□".repeat(total - allocated).styledText()
   else:
-    errored = true
-    gameState.writeError("Expected: 'energy {Shield | Weapon | Logistic | Engine} powerlevel'.")
+    let kind = kind.get()
+    if used > 0:
+      result.add "■".repeat(used).styledText(GlyphProperties(foreground: systemColor[kind]))
+    let unusedAllocated = allocated - used
+    if unusedAllocated > 0:
+      result.add "■".repeat(allocated - used).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
+    result.add "□".repeat(total - allocated).styledText()
 
-  if not errored:
-    gameState.printCurrentEnergy()
+proc onExit(_: var Energy, gameState: var GameState) = discard
 
+type EnergyDialog = object
+  system: string
+  energyAmount {.tableName: "󰲅", tableStringify: energyUsedFormat.}: tuple[kind: Option[CombatSystemKind], allocated, used, total: int]
 
-proc suggest(_: Energy, gameState: GameState, input: string, ind: var int): string =
-  case input.suggestIndex()
-  of 0, 1:
-    iterator powerableSystems(_: GameState): string =
-      for state in CombatSystemKind:
-        yield $state
-    suggestNext(gameState.powerableSystems(), input, ind)
-  else:
-    ""
+proc update(energy: var Energy, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
+  if TakeInput in flags:
+    let
+      selectedType = CombatSystemKind(energy.selected - 1)
+      state = gameState.activeCombatState()
+
+    if truss.inputs.isDownRepeating(KeycodeLeft) and state.energyDistribution[selectedType] > state.energyUsed[selectedType]:
+      dec state.energyDistribution[selectedType]
+      inc state.energyCount
+
+    if truss.inputs.isDownRepeating(KeycodeRight) and state.energyCount > 0:
+      inc state.energyDistribution[selectedType]
+      dec state.energyCount
+
+    const systemKindCount = CombatSystemKind.high.ord + 1
+    if truss.inputs.isDownRepeating(KeycodeDown):
+      energy.selected = 1 + ((selectedType.ord + 1 + systemKindCount) mod systemKindCount)
+
+    if truss.inputs.isDownRepeating(KeycodeUp):
+      energy.selected = 1 + ((selectedType.ord - 1 + systemKindCount) mod systemKindCount)
+
+  if Draw in flags:
+    let state = gameState.activeCombatState()
+    var table: array[CombatSystemKind.high.int + 2, EnergyDialog]
+    table[0] = EnergyDialog(
+      system: "Unallocated",
+      energyAmount: (none(CombatSystemKind), state.energyCount, 0, state.maxEnergyCount)
+    )
+
+    for name, energy in state.energyDistribution.pairs:
+      table[name.ord + 1] = EnergyDialog(
+        system: $name,
+        energyAmount: (some(name), energy, state.energyUsed[name], state.maxEnergyCount)
+      )
+
+    gameState.buffer.printPaged(
+      table,
+      selected = energy.selected
+    )
+
 
 proc name(_: Energy): string = "energy"
+proc getFlags(_: Energy): set[ProgramFlag] = {}
+
+proc handler(_: Energy, gameState: var GameState, input: string) =
+  gameState.enterProgram(Energy().toTrait(Program))
+
+proc suggest(_: Energy, gameState: GameState, input: string, ind: var int): string =
+  ""
+
 proc help(_: Energy): string = "Adjust energy level of systems"
 proc manual(_: Energy): string = ""
 
@@ -173,22 +177,22 @@ const
 
 proc damageFormat(d: DamageDealt): StyledText =
   for name, damage in d.pairs:
-    result = result.add styledText(damageIcon[name], damageProps[name])
-    result = result.add styledText($damage, damageProps[name])
+    result.add styledText(damageIcon[name], damageProps[name])
+    result.add styledText($damage, damageProps[name])
     if name != DamageKind.high:
-      result = result.add styledText(" ")
+      result.add styledText(" ")
 
 proc modifierFormat(d: DamageModifiers): StyledText =
   for name, damage in d.pairs:
-    result = result.add styledText(damageIcon[name], damageProps[name])
-    result = result.add styledText($damage & "x", damageProps[name])
+    result.add styledText(damageIcon[name], damageProps[name])
+    result.add styledText($damage & "x", damageProps[name])
     if name != DamageKind.high:
-      result = result.add styledText(" ")
+      result.add styledText(" ")
 
 proc healthFormat(health: (int, int)): StyledText =
-  result = result.add styledText($health[0], GlyphProperties(foreground: mix(parseHtmlColor"red", parseHtmlColor"lime", health[0] / health[1])))
-  result = result.add styledText"/"
-  result = result.add styledText($health[1], GlyphProperties(foreground: parseHtmlColor"lime"))
+  result.add styledText($health[0], GlyphProperties(foreground: mix(parseHtmlColor"red", parseHtmlColor"lime", health[0] / health[1])))
+  result.add styledText"/"
+  result.add styledText($health[1], GlyphProperties(foreground: parseHtmlColor"lime"))
 
 
 type WeaponDialog = object
@@ -206,6 +210,7 @@ type TargetDialog = object
   health {.tableStringify: healthFormat.}: (int, int)
 
 proc onExit(_: var Target, gameState: var GameState) = discard
+
 proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   let theState = gameState.activeCombatState()
   if TakeInput in flags:
