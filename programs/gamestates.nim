@@ -131,10 +131,13 @@ proc activeProgramTrait(gameState: GameState, screen: Screen): Traitor[Program] 
 
 proc exitProgram*(gameState: var GameState) =
   gameState.activeProgramTrait(gamestate.screen).onExit(gameState)
+  gameState.buffer.clearLine()
+  gameState.buffer.put(ShellCarrot)
   gameState.screen.activeProgram = insStr""
   gamestate.buffer.showCursor(0)
   gameState.input.pos = 0
   gameState.input.str.setLen(0)
+
 
 proc hasProgram*(gameState: var GameState, name: string): bool =
   gameState.activeShip in gameState.programs and name.InsensitiveString in gameState.programs[gameState.activeShip]
@@ -320,7 +323,7 @@ proc takeSuggestion(gameState: var GameState) =
 
 proc dispatchCommand(gameState: var GameState) =
   let input = gameState.popInput()
-  if not input.isEmptyOrWhitespace():
+  if not input.isEmptyOrWhitespace() and (gameState.history.len == 0 or gameState.history[^1] != input):
     gameState.history.add input
   gameState.historyPos = 0
   if input.len > 0:
@@ -403,6 +406,7 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
   if truss.inputs.inputText().len > 0:
     gameState.input.str.insert truss.inputs.inputText(), gameState.input.pos
     gameState.input.pos.inc truss.inputs.inputText().len
+    gameState.historyPos = 0
     truss.inputs.setInputText("")
     gameState.clearSuggestion()
     dirtyInput()
@@ -493,27 +497,27 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
               gameState.dispatchCommand()
             dirtyInput()
 
-          if truss.inputs.isDownRepeating(KeyCodeUp) and isActiveScreen and not lAltPressed: # Up History
-            inc gameState.historyPos
+
+          let dir =
+            if truss.inputs.isDownRepeating(KeyCodeUp):
+              1
+            elif truss.inputs.isDownRepeating(KeyCodeDown):
+              -1
+            else:
+              0
+
+          if dir != 0 and isActiveScreen and not lAltPressed: # History navigation
+            gamestate.historyPos += dir
             if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
               gameState.input.str = gameState.history[^gameState.historyPos]
               gameState.input.pos = gameState.input.str.len
             else:
               gamestate.input.str = ""
               gameState.input.pos = gameState.input.str.len
+            gameState.clearSuggestion()
             dirtyInput()
 
-          if truss.inputs.isDownRepeating(KeyCodeDown) and isActiveScreen and not lAltPressed: # Down History
-            dec gamestate.historyPos
-            if gameState.historyPos <= gameState.history.len and gameState.historyPos > 0:
-              gameState.input.str = gameState.history[^gameState.historyPos]
-              gameState.input.pos = gameState.input.str.len
-            else:
-              gamestate.input.str = ""
-              gameState.input.pos = gameState.input.str.len
-            dirtyInput()
-
-          gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len)
+          gamestate.historyPos = clamp(gameState.historyPos, 0, gameState.history.len + 1)
 
           if not gameState.screen.inProgram and dirtiedInput:
             gameState.buffer.clearLine()
@@ -539,8 +543,6 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
       if screen.inProgram and isActiveScreen:
         if truss.inputs.isDown(KeyCodeEscape):
           gameState.exitProgram()
-          gameState.buffer.put ShellCarrot
-          gamestate.buffer.showCursor(0)
 
       gameState.screen = oldScreen
       case screen.action
