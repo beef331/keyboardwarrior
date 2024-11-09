@@ -107,7 +107,11 @@ iterator tableEntries*[T](
         when field.hasCustomPragma(tableStringify):
           let str = field.getCustomPragmaVal(tableStringify)[0](field)
         else:
-          let str = $field
+          let str =
+            when field is StyledText:
+              field
+            else:
+              $field
 
 
         strings.add:

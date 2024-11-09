@@ -94,12 +94,12 @@ proc energyUsedFormat(data: tuple[kind: Option[CombatSystemKind], allocated, use
     let unusedAllocated = allocated - used
     if unusedAllocated > 0:
       result.add "■".repeat(allocated - used).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
-    result.add "□".repeat(total - allocated).styledText()
+    result.add "□".repeat(total - allocated).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
 
 proc onExit(_: var Energy, gameState: var GameState) = discard
 
 type EnergyDialog = object
-  system: string
+  system: StyledText
   energyAmount {.tableName: "󰲅", tableStringify: energyUsedFormat.}: tuple[kind: Option[CombatSystemKind], allocated, used, total: int]
 
 proc update(energy: var Energy, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
@@ -127,13 +127,13 @@ proc update(energy: var Energy, gameState: var GameState, truss: var Truss, dt: 
     let state = gameState.activeCombatState()
     var table: array[CombatSystemKind.high.int + 2, EnergyDialog]
     table[0] = EnergyDialog(
-      system: "Unallocated",
+      system: styledText"Unallocated",
       energyAmount: (none(CombatSystemKind), state.energyCount, 0, state.maxEnergyCount)
     )
 
     for name, energy in state.energyDistribution.pairs:
       table[name.ord + 1] = EnergyDialog(
-        system: $name,
+        system: styledText($name, GlyphProperties(foreground: systemColor[name])),
         energyAmount: (some(name), energy, state.energyUsed[name], state.maxEnergyCount)
       )
 
@@ -342,9 +342,6 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
             unselectedModifier = proc(props: var GlyphProperties) =
               props.foreground = props.foreground * 0.3f
           )
-
-
-
 
 
 proc getFlags(_: Target): set[ProgramFlag] = discard

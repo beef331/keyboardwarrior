@@ -423,7 +423,7 @@ proc numberOfSystemsWithAny*(state: CombatState, flags: set[SystemFlag]): int =
       inc result
 
 proc turnsTillCharged*(system: CombatSystem): int =
-  system.realSystem.chargeTurns - system.chargeAmount
+  max(system.realSystem.chargeTurns - system.chargeAmount, 0)
 
 
 proc fireState*(system: CombatSystem): FireError =
@@ -458,7 +458,6 @@ proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
 
 proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
-
   None
 
 
@@ -480,9 +479,10 @@ proc delete[T](s: var seq[T], inds: seq[int]) =
   for i in countDown(inds.high, 0):
     s.delete(i)
 
-
 proc endTurn*(combat: Combat) =
-  let nextState = combat.entityToCombat[combat.turnOrder.peekFirst()]
+  let
+    ent = combat.turnOrder.peekFirst()
+    nextState = combat.entityToCombat[ent]
 
   var toRemove: seq[int]
   for i, action in nextState.actions.pairs:
@@ -498,7 +498,7 @@ proc endTurn*(combat: Combat) =
 
     of Charge:
       inc action.system.chargeAmount
-      if action.system.turnsTillCharged() == 0:
+      if action.system.chargeState() == FullyCharged:
         toRemove.add i
 
   nextState.actions.delete(toRemove)
@@ -513,8 +513,9 @@ proc endTurn*(combat: Combat) =
 
     state.damages.delete(toRemove)
 
-  combat.turnOrder.addLast(combat.activeEntity)
+  combat.turnOrder.addLast(ent)
   combat.activeEntity = combat.turnOrder.popFirst()
+
 
 
 iterator systemsWithAny*(combatState: CombatState, flags: set[Systemflag]): CombatSystem =
