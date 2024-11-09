@@ -37,7 +37,7 @@ type
 
   FireError* = enum
     None
-    InsufficientlyCharged = $CombatInteractError
+    InsufficientlyCharged = $CombatInteractError.InsufficientlyCharged
     NoTarget = "Has no target"
 
 
@@ -57,17 +57,26 @@ type
     combatState*: CombatState
 
 
-  ActionEffect = enum
+  DamageEffect = enum
     Interrupt
     Interruptable
 
 
-  Action = object
-    effects: set[ActionEffect]
+  DamageEvent = object
+    effects: set[DamageEffect]
     damages: DamageDealt
     turnsToImpact: int
     targetSystem: InsensitiveString
     target: ControlledEntity
+
+  ActionKind = enum
+    Fire
+    Charge
+
+  Action = object
+    kind: ActionKind
+    system: CombatSystem
+    cost: int
 
 
   CombatState* = ref object
@@ -75,12 +84,12 @@ type
     maxHull*: int
     shield*: int
     maxShield*: int
-    energyUsed*: array[CombatSystemKind, int]
     energyDistribution*: array[CombatSystemKind, int]
     systems*: Table[InsensitiveString, CombatSystem]
     energyCount*: int
     maxEnergyCount*: int
     entity*: ControlledEntity
+    damages: seq[DamageEvent]
     actions: seq[Action]
 
 
@@ -97,6 +106,10 @@ type
     seed: int # Start seed to allow reloading state from chunks
     randState*: Rand
     inventoryItems: Table[InsensitiveString, InventoryEntry] # We do not want to remake InventoryItems so they're the same off reference
+
+proc energyUsed*(combatState: CombatState): array[CombatSystemKind, int] =
+  for action in combatState.actions:
+    result[action.system.kind] += action.cost
 
 proc `==`*(a, b: LocationId): bool = a.int == b.int
 
@@ -381,20 +394,25 @@ proc combatHasEntityNamed*(world: World, combat: Combat, name: InsensitiveString
       return true
 
 proc powerOn*(state: CombatState, system: InsensitiveString): CombatInteractError =
-  let sys {.byaddr.} = state.systems[system]
-  if state.unusedPower(sys.kind) < sys.realSystem.chargeEnergyCost:
+  let system = state.systems[system]
+  if state.unusedPower(system.kind) < system.realSystem.chargeEnergyCost:
     NotEnoughPower
-  elif Active in sys.flags:
+  elif Active in system.flags:
     AlreadyPowered
   else:
-    sys.flags.incl Active
-    state.energyUsed[sys.kind] += sys.realSystem.chargeEnergyCost
+    state.actions.add Action(
+        kind: Charge,
+        system: system,
+        cost: system.realSystem.chargeEnergyCost
+      )
     None
 
 proc powerOff*(state: CombatState, system: InsensitiveString): CombatInteractError =
-  let sys {.byaddr.} = state.systems[system]
-  if Active in sys.flags:
-    state.energyUsed[sys.kind] -= sys.realSystem.chargeEnergyCost
+  let system = state.systems[system]
+  if Active in system.flags:
+    for i in countDown(state.actions.high, 0):
+      if state.actions[i].system == system:
+        state.actions.delete(i)
     None
   else:
     AlreadyUnpowered
@@ -411,7 +429,7 @@ proc turnsTillCharged*(system: CombatSystem): int =
 proc fireState*(system: CombatSystem): FireError =
   if system.target == nil or system.targetSystem == InsensitiveString"":
     NoTarget
-  elif system.turnsTillCharged() != 0:
+  elif system.turnsTillCharged() > 0:
     InsufficientlyCharged
   else:
     None
@@ -419,7 +437,7 @@ proc fireState*(system: CombatSystem): FireError =
 proc chargeState*(combatSystem: CombatSystem): ChargeState =
   if combatSystem.realSystem.chargeTurns == 0:
     NotChargable
-  elif combatSystem.turnsTillCharged() != 0:
+  elif combatSystem.turnsTillCharged() > 0:
     NotCharged
   else:
     FullyCharged
@@ -429,26 +447,24 @@ proc canTarget*(combatSystem: CombatSystem, this, target: ControlledEntity): boo
   (TargetOther in combatSystem.realSystem.flags and this != target)
 
 proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
-  let sys {.byaddr.} = state.systems[system]
-  if sys.turnsTillCharged > 0:
+  let system = state.systems[system]
+  if system.turnsTillCharged > 0:
     InsufficientlyCharged
-  elif state.unusedPower(sys.kind) < sys.realSystem.activateCost:
+  elif state.unusedPower(system.kind) < system.realSystem.activateCost:
     NotEnoughPower
   else:
-    sys.flags.incl CombatSystemFlag.Fire
-    state.energyUsed[sys.kind] += sys.realSystem.activateCost
+    state.actions.add Action(kind: Fire, system: system, cost: system.realSystem.activateCost)
     None
 
 proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let sys {.byaddr.} = state.systems[system]
-  if Fire in sys.flags:
-    state.energyUsed[sys.kind] -= sys.realSystem.activateCost
-  sys.flags.excl CombatSystemFlag.Fire
+
   None
 
 
-proc handle(action: Action, combat: Combat, combatState: CombatState): bool =
+proc handle(action: var DamageEvent, combat: Combat, combatState: CombatState): bool =
   # returns true if it should be removed from the list
+  dec action.turnsToImpact
   if action.turnsToImpact <= 0:
     let system = combat.entityToCombat[action.target].systems[action.targetSystem].realSystem
     for kind, damage in action.damages:
@@ -460,34 +476,42 @@ proc handle(action: Action, combat: Combat, combatState: CombatState): bool =
   else:
     false
 
+proc delete[T](s: var seq[T], inds: seq[int]) =
+  for i in countDown(inds.high, 0):
+    s.delete(i)
+
 
 proc endTurn*(combat: Combat) =
   let nextState = combat.entityToCombat[combat.turnOrder.peekFirst()]
-  for system in nextState.systems.mvalues:
-    if Active in system.flags:
-      inc system.chargeAmount
-      if system.turnsTillCharged() == 0:
-        system.flags.excl Active
-        system.flags.incl Charged
-        nextState.energyUsed[system.kind] -= system.realSystem.chargeEnergyCost
 
-    if Fire in system.flags:
-      system.combatState.actions.add Action(
-        damages: system.realSystem.damageDealt,
-        target: system.target,
-        targetSystem: system.targetSystem
+  var toRemove: seq[int]
+  for i, action in nextState.actions.pairs:
+    case action.kind
+    of Fire:
+      toRemove.add i
+      nextState.damages.add DamageEvent(
+        damages: action.system.realSystem.damageDealt,
+        target: action.system.target,
+        targetSystem: action.system.targetSystem
       )
-      nextState.energyUsed[system.kind] -= system.realSystem.activateCost
+
+
+    of Charge:
+      inc action.system.chargeAmount
+      if action.system.turnsTillCharged() == 0:
+        toRemove.add i
+
+  nextState.actions.delete(toRemove)
+
 
 
   for state in combat.entityToCombat.values:
     var toRemove: seq[int]
-    for i, action in state.actions.mpairs:
-      dec action.turnsToImpact
-      if action.handle(combat, state):
+    for i, damage in state.damages.mpairs:
+      if damage.handle(combat, state):
         toRemove.add i
-    for i in toRemove:
-      state.actions.delete(i)
+
+    state.damages.delete(toRemove)
 
   combat.turnOrder.addLast(combat.activeEntity)
   combat.activeEntity = combat.turnOrder.popFirst()
