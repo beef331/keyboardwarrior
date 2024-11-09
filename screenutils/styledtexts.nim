@@ -81,6 +81,11 @@ proc add*(result: var StyledText, toAdd: sink StyledText) =
   result.len += toAdd.len
   result.fragments.add ensureMove toAdd.fragments
 
+
+proc add*(result: var StyledText, toAdd: sink string) =
+  result.add styledText(toAdd)
+
+
 proc put*(buff: var Buffer, s: StyledText, moveCamera = true, wrapped = false, modifier: proc(_: var GlyphProperties) = nil) =
   for frag in s.fragments:
     let msg {.cursor.} = frag.msg
@@ -105,3 +110,25 @@ proc put*(buff: var Buffer, s: StyledText, moveCamera = true, wrapped = false, m
     buff.put(msg, props, moveCamera, wrapped)
 
 
+
+proc putToLine*(buff: var Buffer, s: StyledText, modifier: proc(_: var GlyphProperties) = nil): (Line, int) =
+  for frag in s.fragments:
+    let msg {.cursor.} = frag.msg
+    var props: GlyphProperties
+
+    if frag.usesRaw:
+      props = frag.props
+
+    else:
+      props = buff.properties
+      if frag.modifiedProps != nil:
+        for prop, val in frag.modifiedProps:
+          for name, field in props.fieldPairs:
+            if name == prop:
+              when field is Color:
+                field = parseHtmlColor(val)
+              elif field is float32:
+                field = parseFloat(val).float32
+    if modifier != nil:
+      modifier(props)
+    result[1] += buff.put(result[0], msg, props, result[1])

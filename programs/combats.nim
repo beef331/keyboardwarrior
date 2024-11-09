@@ -25,6 +25,7 @@ type
     targetSelection: int
     entity: SpaceEntity
     target: InsensitiveString
+    tickerProgress: float32 = 0
 
   Activate = object
 
@@ -212,6 +213,10 @@ type TargetDialog = object
 proc onExit(_: var Target, gameState: var GameState) = discard
 
 proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
+  targ.tickerProgress += dt * 0.2
+  if targ.tickerProgress >= 1:
+    targ.tickerProgress = 0
+
   let theState = gameState.activeCombatState()
   if TakeInput in flags:
     case targ.selecting
@@ -219,10 +224,15 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
       let targetableCount = theState.numberOfSystemsWithAny({TargetSelf, TargetOther})
 
       if truss.inputs.isDownRepeating(KeycodeDown):
+        reset targ.tickerProgress
         targ.weaponSelection = (targ.weaponSelection - 1 + targetableCount) mod targetableCount
+
       if truss.inputs.isDownRepeating(KeycodeUp):
+        reset targ.tickerProgress
         targ.weaponSelection = (targ.weaponSelection + 1 + targetableCount) mod targetableCount
+
       if truss.inputs.isDown(KeycodeReturn):
+        reset targ.tickerProgress
         targ.selecting = EntitySelect
         var ind = 0
         for sys in theState.systems.values:
@@ -239,9 +249,12 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
           inc entityCount
 
       if truss.inputs.isDownRepeating(KeycodeLeft):
+        reset targ.tickerProgress
         targ.entitySelection = (targ.entitySelection - 1 + entityCount) mod entityCount
         targ.targetSelection = 0
+
       if truss.inputs.isDownRepeating(KeycodeRight):
+        reset targ.tickerProgress
         targ.entitySelection = (targ.entitySelection + 1 + entityCount) mod entityCount
         targ.targetSelection = 0
 
@@ -256,11 +269,15 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
           inc i
 
       if truss.inputs.isDownRepeating(KeycodeUp):
+        reset targ.tickerProgress
         targ.targetSelection = (targ.targetSelection - 1 + targetCount) mod targetCount
+
       if truss.inputs.isDownRepeating(KeycodeDown):
+        reset targ.tickerProgress
         targ.targetSelection = (targ.targetSelection + 1 + targetCount) mod targetCount
 
       if truss.inputs.isDown(KeycodeReturn):
+        reset targ.tickerProgress
         let combat = gameState.activeCombat()
         for i, entity in enumerate targ.weaponSystem.targetableEntities(combat, gameState.activeShip):
           if i == targ.entitySelection:
@@ -296,8 +313,10 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
       gameState.buffer.printPaged(
         weapons,
         targ.weaponSelection,
-        unselectedModifier = proc(props: var GlyphProperties) =
+        unselectedModifier = (proc(props: var GlyphProperties) =
           props.foreground = props.foreground * 0.3f
+        ),
+        tickerProgress = targ.tickerProgress
         )
 
     else:
@@ -339,8 +358,10 @@ proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: fl
           gameState.buffer.printPaged(
             targetEntries,
             targ.targetSelection,
-            unselectedModifier = proc(props: var GlyphProperties) =
+            unselectedModifier = (proc(props: var GlyphProperties) =
               props.foreground = props.foreground * 0.3f
+            ),
+            tickerProgress = targ.tickerProgress
           )
 
 

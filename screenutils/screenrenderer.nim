@@ -58,8 +58,8 @@ type
     rune: Rune
     properties: uint16 # uin16.high different properties, surely we'll never go that high
 
-  Line = object
-    glyphs: array[screenRendererLineLength, Glyph]
+  Line* = object
+    glyphs*: array[screenRendererLineLength, Glyph]
 
 iterator items(line: Line): Glyph =
   for glyph in line.glyphs:
@@ -567,6 +567,30 @@ proc isNewLine(rune: Rune): bool = rune == Rune '\n'
 proc isNewLine(glyph: Glyph): bool = glyph.rune.isNewLine()
 
 
+proc put*(buffer: var Buffer, line: var Line, s: string | openArray[Glyph], props: GlyphProperties, start: int = 0): int =
+  when s is string:
+    let propIndex = buffer.getPropertyIndex(props)
+    for rune in s.runes:
+      line.glyphs[start + result] = Glyph(rune: rune, properties: propIndex)
+      inc result
+  else:
+    line.glyphs[start .. s.high + start] = s
+
+proc put*(buffer: var Buffer, line: var Line, s: string | openArray[Glyph], start: int = 0): int =
+  buffer.put(line, s, buffer.properties, start)
+
+proc shouldTicker*(buffer: Buffer, len: int): bool = len - 1 > buffer.lineWidth - buffer.cursorX
+
+proc ticker*(buffer: Buffer, line: var Line, progress: float32, len: int) =
+  if buffer.shouldTicker(len):
+    var temp = line
+    let
+      startIndex = int((len.float32 - 1) * progress)
+      endIndex = clamp(startIndex + len - 1 , startIndex, len - 1)
+
+    line.glyphs[0 .. endIndex - startIndex] = temp.glyphs[startIndex..endIndex]
+    line.glyphs[endIndex - startIndex + 1 .. len - 1] = temp.glyphs[0 .. startIndex - 1]
+
 proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, wrapped = false, getBuffer: static bool = false): auto =
   ## `moveCamera` indicates whether the camera should move when messages go off screenSize
   ## `wrapped` means that instead of writting in deadspace a newline will be inserted
@@ -601,6 +625,10 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
 
   if moveCamera and buff.cursorY - buff.cameraPos >= buff.lineHeight:
     buff.cameraPos = buff.lines.len - buff.lineHeight
+
+proc put*(buff: var Buffer, line: Line, len: int, moveCamera = true, wrapped = false, getBuffer: static bool = false): auto =
+  buff.put(line.glyphs.toOpenArray(0, len - 1), GlyphProperties(), moveCamera, wrapped, getBuffer)
+
 
 proc put*(buff: var Buffer, s: string, moveCamera = true, wrapped = false) =
   put buff, s, buff.properties, moveCamera, wrapped
@@ -697,7 +725,7 @@ proc toBottom*(buff: var Buffer) =
   assert buff.mode == Text
   buff.cameraPos = buff.lines.high
 
-proc getPosition*(buff: var Buffer): (int, int) =
+proc getPosition*(buff: Buffer): (int, int) =
   assert buff.mode == Text
   (buff.cursorX, buff.cursorY)
 

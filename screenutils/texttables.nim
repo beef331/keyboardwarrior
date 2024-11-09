@@ -25,8 +25,9 @@ import screenrenderer, styledtexts
 
 proc alignRight*(s: StyledText, count: Natural, padding = ' '): StyledText =
   result = s
-  result.fragments.insert(Fragment(msg: padding.repeat(count - result.len)), 0)
-  result.len = count
+  if count > result.len:
+    result.fragments.insert(Fragment(msg: padding.repeat(count - result.len)), 0)
+    result.len = count
 
 proc alignLeft*(s: StyledText, count: Natural, padding = ' '): StyledText =
   result = s
@@ -36,7 +37,6 @@ proc alignLeft*(s: StyledText, count: Natural, padding = ' '): StyledText =
 type
   TableKind* = enum
     NewLine
-    Seperator
     Entry
   AlignFunction* = proc(_: StyledText, _: Natural, padding: char): StyledText
 
@@ -70,8 +70,11 @@ proc toPrintedName(name: string): string =
 
 iterator tableEntries*[T](
   values: openArray[T],
-  properties: GlyphProperties
+  buffer: Buffer,
+  seperator: string
   ): tuple[msg: StyledText, kind: TableKind] =
+
+  let properties = buffer.properties
   var
     strings = newSeqOfCap[StyledText](values.len * T.paramCount)
     largest = newSeq[int](T.paramCount)
@@ -123,14 +126,18 @@ iterator tableEntries*[T](
         largest[fieldInd] = max(strings[^1].len, largest[fieldInd])
         inc entryInd
         inc fieldInd
-
   for i, entry in strings:
-    let alignInd = i mod T.paramCount
-    yield (alignFunctions[alignInd](entry, largest[alignInd]), Entry)
+    let
+      alignInd = i mod T.paramCount
+      size = max(min(largest[alignInd], buffer.lineWidth - buffer.getPosition()[0]), 0)
+
+    var entry = alignFunctions[alignInd](entry, size)
+
+    yield (entry, Entry)
     if (i + 1) mod T.paramCount == 0:
       yield (styledText"", NewLine)
     else:
-      yield (styledText"", Seperator)
+      yield (styledText seperator, Entry)
 
 
 
@@ -138,38 +145,52 @@ proc printTable*[T: object or tuple](
   buffer: var Buffer,
   table: openArray[T],
 ) =
-  for str, kind in table.tableEntries(buffer.properties):
+  for str, kind in table.tableEntries(buffer, "|"):
     case kind
     of Entry:
       buffer.put(str)
     of NewLine:
       buffer.newLine()
-    of Seperator:
-      buffer.put("|")
 
 
 proc printPaged*[T: object or tuple](
   buffer: var Buffer;
   table: openArray[T];
   selected: int = -1;
+  seperator = "|";
   printHeader: bool = true;
   unselectedModifier: proc(prop: var GlyphProperties) = nil;
   selectedModifier: proc(prop: var GlyphProperties) = nil;
+  tickerProgress = 0f32
 ) =
   var line = 0
+
   if selected != -1:
     buffer.put " " # Everything is offset
-  for str, kind in table.tableEntries(buffer.properties):
+
+  let modifiers = [false: unselectedModifier, selectedModifier]
+  for str, kind in table.tableEntries(buffer, seperator):
     if not printHeader and line == 0:
       if kind == NewLine:
         inc line
       continue
     case kind
     of Entry:
-      if selected + 1 == line:
-        buffer.put(str, modifier = selectedModifier)
+      let modifier = modifiers[selected + 1 == line]
+      if tickerProgress == 0:
+        buffer.put(str, modifier = modifier)
       else:
-        buffer.put(str, modifier = unselectedModifier)
+        var (line, len) =
+          buffer.putToLine(str, modifier = modifier)
+        if buffer.shouldTicker(len):
+          var props = buffer.properties
+          if modifier != nil:
+            modifier(props)
+          len += buffer.put(line, "][", props, len)
+        buffer.ticker(line, tickerProgress, len)
+        buffer.put(line.glyphs.toOpenArray(0, len - 1), buffer.properties)
+
+
     of NewLine:
       buffer.newLine()
       if selected != -1:
@@ -178,6 +199,3 @@ proc printPaged*[T: object or tuple](
         else:
           buffer.put " "
       inc line
-    of Seperator:
-      buffer.put("|")
-
