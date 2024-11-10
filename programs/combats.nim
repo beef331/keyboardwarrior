@@ -197,7 +197,7 @@ proc healthFormat(health: (int, int)): StyledText =
 
 
 type WeaponDialog = object
-  name {.tableAlign: alignLeft.}: string
+  name {.tableAlign: alignLeft, tableTickerSize: 10.}: string
   damage {.tableStringify: damageFormat.}: DamageDealt
   chargeTurns {.tableStringify: chargeIndicator, tableName: "󱤤".}: int
   chargeCost {.tableStringify: chargeIndicator, tableName: "󰟌".}: int
@@ -213,9 +213,7 @@ type TargetDialog = object
 proc onExit(_: var Target, gameState: var GameState) = discard
 
 proc update(targ: var Target, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
-  targ.tickerProgress += dt * 0.2
-  if targ.tickerProgress >= 1:
-    targ.tickerProgress = 0
+  targ.tickerProgress += dt * 3
 
   let theState = gameState.activeCombatState()
   if TakeInput in flags:

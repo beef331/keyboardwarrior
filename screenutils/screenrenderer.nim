@@ -579,17 +579,44 @@ proc put*(buffer: var Buffer, line: var Line, s: string | openArray[Glyph], prop
 proc put*(buffer: var Buffer, line: var Line, s: string | openArray[Glyph], start: int = 0): int =
   buffer.put(line, s, buffer.properties, start)
 
-proc shouldTicker*(buffer: Buffer, len: int): bool = len - 1 > buffer.lineWidth - buffer.cursorX
+proc shouldTicker*(buffer: Buffer, line: Line, len, width: int): bool =
+  if width == -1:
+    len - 1 > buffer.lineWidth - buffer.cursorX
+  elif len < width:
+    false
+  else:
+    for i in width..len:
+      if not line.glyphs[i].rune.isWhiteSpace():
+        return true
+    false
 
-proc ticker*(buffer: Buffer, line: var Line, progress: float32, len: int) =
-  if buffer.shouldTicker(len):
+proc ticker*(buffer: Buffer, line: var Line, progress: float32, len: var int, width = -1) =
+  ## Tickers the line, if width is supplied trims whitespace from the right side
+  let
+    high = len - 1
+    offset =
+      if width == -1:
+        min(high, buffer.lineWidth - buffer.cursorX - 1)
+      else:
+        width
+  if width != -1:
+    len = offset
+
+  if buffer.shouldTicker(line, len, width):
+
+
+    let startIndex = int((high.float32) + progress) mod high
+
+    if startIndex == 0:
+      return
+
     var temp = line
     let
-      startIndex = int((len.float32 - 1) * progress)
-      endIndex = clamp(startIndex + len - 1 , startIndex, len - 1)
-
-    line.glyphs[0 .. endIndex - startIndex] = temp.glyphs[startIndex..endIndex]
-    line.glyphs[endIndex - startIndex + 1 .. len - 1] = temp.glyphs[0 .. startIndex - 1]
+      endIndex = clamp(startIndex + offset, startIndex, high)
+      sliceEnd = endIndex - startIndex
+      remaining = offset - sliceEnd
+    line.glyphs[0 .. sliceEnd] = temp.glyphs[startIndex..endIndex]
+    line.glyphs[sliceEnd + 1 ..  sliceEnd + 1 + remaining] = temp.glyphs[0 .. remaining]
 
 proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties, moveCamera = true, wrapped = false, getBuffer: static bool = false): auto =
   ## `moveCamera` indicates whether the camera should move when messages go off screenSize

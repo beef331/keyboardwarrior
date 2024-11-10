@@ -41,6 +41,7 @@ type
   AlignFunction* = proc(_: StyledText, _: Natural, padding: char): StyledText
 
 template tableName*(s: string or StyledText){.pragma.}
+template tableTickerSize*(i: int) {.pragma.}
 template tableAlign*(_: AlignFunction){.pragma.}
 template tableStringify*(p: proc {.nimcall.}){.pragma.}
 template tableSkip*() {.pragma.}
@@ -72,12 +73,13 @@ iterator tableEntries*[T](
   values: openArray[T],
   buffer: Buffer,
   seperator: string
-  ): tuple[msg: StyledText, kind: TableKind] =
+  ): tuple[msg: StyledText, kind: TableKind, tickerSize: int] =
 
   let properties = buffer.properties
   var
     strings = newSeqOfCap[StyledText](values.len * T.paramCount)
     largest = newSeq[int](T.paramCount)
+    tickerSize = newSeqWith[int](T.paramCount, -1)
     alignFunctions = newSeqWith(T.paramCount, alignRight)
 
   var fieldInd = 0
@@ -94,6 +96,9 @@ iterator tableEntries*[T](
         alignFunctions[fieldInd] = field.getCustomPragmaVal(tableAlign)
 
       largest[fieldInd] = nameStr.len
+      when field.hasCustomPragma(tableTickerSize):
+        tickerSize[fieldInd] = field.getCustomPragmaVal(tableTickerSize)
+
       strings.add:
         when nameStr is StyledText:
           nameStr
@@ -126,6 +131,7 @@ iterator tableEntries*[T](
         largest[fieldInd] = max(strings[^1].len, largest[fieldInd])
         inc entryInd
         inc fieldInd
+
   for i, entry in strings:
     let
       alignInd = i mod T.paramCount
@@ -133,11 +139,11 @@ iterator tableEntries*[T](
 
     var entry = alignFunctions[alignInd](entry, size)
 
-    yield (entry, Entry)
+    yield (entry, Entry, tickerSize[alignInd])
     if (i + 1) mod T.paramCount == 0:
-      yield (styledText"", NewLine)
+      yield (styledText"", NewLine, -1)
     else:
-      yield (styledText seperator, Entry)
+      yield (styledText seperator, Entry, -1)
 
 
 
@@ -145,7 +151,7 @@ proc printTable*[T: object or tuple](
   buffer: var Buffer,
   table: openArray[T],
 ) =
-  for str, kind in table.tableEntries(buffer, "|"):
+  for str, kind, tickerSize in table.tableEntries(buffer, "|"):
     case kind
     of Entry:
       buffer.put(str)
@@ -169,7 +175,7 @@ proc printPaged*[T: object or tuple](
     buffer.put " " # Everything is offset
 
   let modifiers = [false: unselectedModifier, selectedModifier]
-  for str, kind in table.tableEntries(buffer, seperator):
+  for str, kind, tickerSize in table.tableEntries(buffer, seperator):
     if not printHeader and line == 0:
       if kind == NewLine:
         inc line
@@ -180,14 +186,15 @@ proc printPaged*[T: object or tuple](
       if tickerProgress == 0:
         buffer.put(str, modifier = modifier)
       else:
-        var (line, len) =
-          buffer.putToLine(str, modifier = modifier)
-        if buffer.shouldTicker(len):
+        var (line, len) = buffer.putToLine(str, modifier = modifier)
+
+        if buffer.shouldTicker(line, len, tickerSize):
           var props = buffer.properties
           if modifier != nil:
             modifier(props)
-          len += buffer.put(line, "][", props, len)
-        buffer.ticker(line, tickerProgress, len)
+          len += buffer.put(line, "󱞩", props, len)
+
+        buffer.ticker(line, tickerProgress, len, tickerSize)
         buffer.put(line.glyphs.toOpenArray(0, len - 1), buffer.properties)
 
 
