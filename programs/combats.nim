@@ -13,6 +13,8 @@ type
   Energy = object
     selected: int = 1
 
+  Action = object
+
   TargettingState = enum
     WeaponSelect
     EntitySelect
@@ -83,25 +85,29 @@ const systemColor = [
   Engines: parseHtmlColor"yellow",
 ]
 
-proc energyUsedFormat(data: tuple[kind: Option[CombatSystemKind], allocated, used, total: int]): StyledText =
-  let (kind, allocated, used, total) = data
-  if kind.isNone:
-    result.add "■".repeat(allocated).styledText()
-    result.add "□".repeat(total - allocated).styledText()
-  else:
-    let kind = kind.get()
-    if used > 0:
-      result.add "■".repeat(used).styledText(GlyphProperties(foreground: systemColor[kind]))
-    let unusedAllocated = allocated - used
-    if unusedAllocated > 0:
-      result.add "■".repeat(allocated - used).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
-    result.add "□".repeat(total - allocated).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
 
 proc onExit(_: var Energy, gameState: var GameState) = discard
 
 type EnergyDialog = object
   system: StyledText
-  energyAmount {.tableName: "󰲅", tableStringify: energyUsedFormat.}: tuple[kind: Option[CombatSystemKind], allocated, used, total: int]
+  kind {.tableSkip.}: Option[CombatSystemKind]
+  allocated {.tableName: "󰲅".}: int
+  used {.tableSkip.}: int
+  total {.tableSkip.}: int
+
+proc tablify(allocated: int, data: EnergyDialog): StyledText =
+  if data.kind.isNone:
+    result.add "■".repeat(allocated).styledText()
+    result.add "□".repeat(data.total - allocated).styledText()
+  else:
+    let kind = data.kind.get()
+    if data.used > 0:
+      result.add "■".repeat(data.used).styledText(GlyphProperties(foreground: systemColor[kind]))
+    let unusedAllocated = allocated - data.used
+    if unusedAllocated > 0:
+      result.add "■".repeat(allocated - data.used).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
+    result.add "□".repeat(data.total - allocated).styledText(GlyphProperties(foreground: systemColor[kind] - 0.3))
+
 
 proc update(energy: var Energy, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
   if TakeInput in flags:
@@ -129,13 +135,19 @@ proc update(energy: var Energy, gameState: var GameState, truss: var Truss, dt: 
     var table: array[CombatSystemKind.high.int + 2, EnergyDialog]
     table[0] = EnergyDialog(
       system: styledText"Unallocated",
-      energyAmount: (none(CombatSystemKind), state.energyCount, 0, state.maxEnergyCount)
+      kind: none(CombatSystemKind),
+      allocated: state.energyCount,
+      used: 0,
+      total: state.maxEnergyCount
     )
 
     for name, energy in state.energyDistribution.pairs:
       table[name.ord + 1] = EnergyDialog(
         system: styledText($name, GlyphProperties(foreground: systemColor[name])),
-        energyAmount: (some(name), energy, state.energyUsed[name], state.maxEnergyCount)
+        kind: some(name),
+        allocated: energy,
+        used: state.energyUsed[name],
+        total: state.maxEnergyCount
       )
 
     gameState.buffer.printPaged(
@@ -197,7 +209,7 @@ proc healthFormat(health: (int, int)): StyledText =
 
 
 type WeaponDialog = object
-  name {.tableAlign: alignLeft, tableTickerSize: 10.}: string
+  name {.tableAlign: alignLeft.}: string
   damage {.tableStringify: damageFormat.}: DamageDealt
   chargeTurns {.tableStringify: chargeIndicator, tableName: "󱤤".}: int
   chargeCost {.tableStringify: chargeIndicator, tableName: "󰟌".}: int
@@ -494,3 +506,37 @@ proc help(_: Activate): string = "Powers on a system"
 proc manual(_: Activate): string = ""
 
 storeCommand Activate().toTrait(CommandImpl), {InCombat}
+
+
+proc onExit(_: var Action, gameState: var GameState) = discard
+
+type ActionEntry = object
+  action: ActionKind
+  name: string
+  cost: int
+
+
+
+proc update(_: var Action, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
+  if Draw in flags:
+    var actions: seq[ActionEntry]
+    for action in gameState.activeCombatState().actions:
+      actions.add ActionEntry(
+        action: action.kind,
+        name: action.system.realSystem.name.string,
+        cost: action.cost
+      )
+    gameState.buffer.printPaged(actions)
+
+proc name(_: Action): string = "action"
+proc getFlags(_: Action): set[ProgramFlag] = {}
+
+proc handler(_: Action, gameState: var GameState, input: string) =
+  gameState.enterProgram(Action().toTrait(Program))
+
+proc suggest(_: Action, gameState: GameState, input: string, ind: var int): string =
+  ""
+
+proc help(_: Action): string = "Shows all the present actions"
+proc manual(_: Action): string = ""
+storeCommand Action().toTrait(CommandImpl), {InCombat}

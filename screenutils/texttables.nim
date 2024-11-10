@@ -75,6 +75,7 @@ iterator tableEntries*[T](
   seperator: string
   ): tuple[msg: StyledText, kind: TableKind, tickerSize: int] =
 
+  mixin tablify
   let properties = buffer.properties
   var
     strings = newSeqOfCap[StyledText](values.len * T.paramCount)
@@ -118,6 +119,8 @@ iterator tableEntries*[T](
           let str =
             when field is StyledText:
               field
+            elif compiles(tablify(field, obj)):
+              tablify(field, obj)
             else:
               $field
 

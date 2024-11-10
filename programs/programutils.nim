@@ -47,7 +47,10 @@ proc suggestIndex*(input: string): int =
 
 proc storecommand*(cmd: Command, usableIn: set[EntityState] = EntityState.fullSet()) =
   for state in usableIn:
+    if cmd.name().InsensitiveString in defaultHandlers[state]:
+      raise newException(ValueError, "Attempting to readd command: " & cmd.name())
     defaultHandlers[state][cmd.name().InsensitiveString] = cmd
+
 
 
 

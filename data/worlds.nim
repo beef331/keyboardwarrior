@@ -69,14 +69,14 @@ type
     targetSystem: InsensitiveString
     target: ControlledEntity
 
-  ActionKind = enum
+  ActionKind* = enum
     Fire
     Charge
 
-  Action = object
-    kind: ActionKind
-    system: CombatSystem
-    cost: int
+  Action* = object
+    kind*: ActionKind
+    system*: CombatSystem
+    cost*: int
 
 
   CombatState* = ref object
@@ -90,7 +90,7 @@ type
     maxEnergyCount*: int
     entity*: ControlledEntity
     damages: seq[DamageEvent]
-    actions: seq[Action]
+    actions*: seq[Action]
 
 
   Combat* = ref object # TODO: Move to own module?
