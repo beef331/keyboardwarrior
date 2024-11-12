@@ -60,6 +60,9 @@ type
     lastFpsBuffer: seq[Glyph]
 
     curveAmount*: float32 # The curve amount
+
+    promptedHello: bool
+
   Command* = Traitor[CommandImpl]
 
 
@@ -446,11 +449,13 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
 
   if not gamestate.world.isReady:
-    gamestate.buffer.setPosition(0, 0)
-    gamestate.buffer.put "Shall we play a game?\n"
-    gamestate.buffer.put "Enter your Ship name:\n"
-    gameState.buffer.clearLine()
-    gameState.showInput()
+    if not gameState.promptedHello:
+      var props = gameState.buffer.properties
+      props.displaySpeed = 0.04
+      gamestate.buffer.put "Shall we play a game?\nEnter your Ship name:\n", props
+      gameState.buffer.clearLine()
+      gameState.showInput()
+      gameState.promptedHello = true
 
     if truss.inputs.isDownRepeating(KeycodeReturn)and gameState.input.str.len > 0:
       let name = gameState.popInput()

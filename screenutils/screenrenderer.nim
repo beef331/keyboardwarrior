@@ -52,11 +52,13 @@ type
     blinkSpeed*: float32
     sineSpeed*: float32
     sineStrength*: float32
+    displaySpeed*: float32
     foreground*, background*: Color
 
   Glyph* = object
     rune: Rune
     properties: uint16 # uin16.high different properties, surely we'll never go that high
+    timeToDisplay: float32
 
   Line* = object
     glyphs*: array[screenRendererLineLength, Glyph]
@@ -118,6 +120,9 @@ type
 
     shapes: seq[Shape] ## Used for graphics mode
 
+    groupPrint: bool # Consider the following until reset as joined in a single block
+    groupIndex: int # Rune index
+
 
     dirtiedColors: bool = true ## Always upload when just instantiated
     colors: ref seq[Color]
@@ -138,6 +143,14 @@ type
 
     graphicCursorX: int = -1
     graphicCursorY: int = -1
+
+
+template grouped*(buff: var Buffer, body: typed): untyped =
+  buff.groupIndex = 0
+  buff.groupPrint = true
+  body
+  buff.groupPrint = false
+  buff.groupIndex = 0
 
 proc `$`(b: Buffer): string = "..."
 
@@ -273,6 +286,9 @@ proc usingFrameBuffer*(buff: Buffer): bool = buff.useFrameBuffer
 proc propIsVisible(buff: Buffer, prop: GlyphProperties): bool =
   prop.blinkSpeed == 0 or round(buff.time * prop.blinkSpeed).int mod 2 != 0
 
+proc glyphIsVisible(buff: Buffer, prop: GlyphProperties, glyph: Glyph): bool =
+  buff.propIsVisible(prop) and glyph.rune != Rune(0) and glyph.timeToDisplay <= 0
+
 proc runeSize*(buffer: var Buffer): Vec2 =
   let entry = buffer.atlas[].runeEntry(Rune '+')
   vec2(entry.rect.w, entry.rect.h)
@@ -300,7 +316,7 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
       y = y - size.y / 2
 
   result = (
-    buff.propIsVisible(prop) and glyph.rune != Rune(0),
+    buff.glyphIsVisible(prop, glyph),
     rune,
     size
   )
@@ -334,7 +350,7 @@ proc uploadRune*(buff: var Buffer, scrSize: Vec2, x, y: float32, glyph: Glyph, i
 
 proc clearShapes*(buff: var Buffer) = buff.shapes.setLen(0)
 
-proc uploadTextMode(buff: var Buffer, screenSize: Vec2) =
+proc uploadTextMode(buff: var Buffer, screenSize: Vec2, dt: float32) =
   assert buff.mode == Text
   let
     scrSize =
@@ -348,7 +364,8 @@ proc uploadTextMode(buff: var Buffer, screenSize: Vec2) =
   buff.fontTarget.model.clear()
   var rendered = false
   for ind in buff.cameraPos .. buff.cursorY:
-    for xPos, glyph in buff.lines[ind]:
+    for xPos, glyph in buff.lines[ind].glyphs.mpairs:
+      glyph.timeToDisplay -= dt
       if xPos > buff.lineWidth:
         break
       var (thisRendered, rune, size) = buff.uploadRune(scrSize, x, y, glyph, ind)
@@ -476,7 +493,7 @@ proc upload*(buff: var Buffer, dt: float32, screenSize: Vec2) =
   buff.time += dt
   case buff.mode
   of Text:
-    buff.uploadTextMode(screenSize)
+    buff.uploadTextMode(screenSize, dt)
   of Graphics:
     buff.uploadGraphicsMode(screenSize)
 
@@ -570,11 +587,19 @@ proc isNewLine(glyph: Glyph): bool = glyph.rune.isNewLine()
 proc put*(buffer: var Buffer, line: var Line, s: string | openArray[Glyph], props: GlyphProperties, start: int = 0): int =
   when s is string:
     let propIndex = buffer.getPropertyIndex(props)
-    for rune in s.runes:
-      line.glyphs[start + result] = Glyph(rune: rune, properties: propIndex)
+    for i, rune in enumerate s.runes:
+      let runeInd =
+        if buffer.groupPrint:
+          inc buffer.groupIndex
+          buffer.groupIndex
+        else:
+          i
+
+      line.glyphs[start + result] = Glyph(rune: rune, properties: propIndex, timeToDisplay: runeInd.float32 * props.displaySpeed)
       inc result
   else:
     line.glyphs[start .. s.high + start] = s
+
 
 proc put*(buffer: var Buffer, line: var Line, s: string | openArray[Glyph], start: int = 0): int =
   buffer.put(line, s, buffer.properties, start)
@@ -631,9 +656,16 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
 
   let propInd = buff.getPropertyIndex(props)
 
-  for rune in s.chr:
+  for i, rune in enumerate s.chr:
     when getBuffer:
       result.add buff.lines[buff.cursorY].glyphs[buff.cursorX]
+
+    let runeInd =
+      if buff.groupPrint:
+        inc buff.groupIndex
+        buff.groupIndex
+      else:
+        i
 
     if rune.isNewLine():
       buff.newLine(moveCamera)
@@ -644,7 +676,7 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
       if buff.cursorX < buff.lineWidth:
         buff.lines[buff.cursorY].glyphs[buff.cursorX] =
           when rune is Rune:
-            Glyph(rune: rune, properties: propInd)
+            Glyph(rune: rune, properties: propInd, timeToDisplay: runeInd.float32 * props.displaySpeed)
           else:
             rune
 

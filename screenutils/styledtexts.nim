@@ -106,8 +106,7 @@ proc put*(buff: var Buffer, s: StyledText, moveCamera = true, wrapped = false, m
                 field = parseFloat(val).float32
     if modifier != nil:
       modifier(props)
-
-    buff.put(msg, props, moveCamera, wrapped)
+    buff.grouped buff.put(msg, props, moveCamera, wrapped)
 
 
 

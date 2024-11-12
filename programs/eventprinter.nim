@@ -41,7 +41,7 @@ proc displayEvent*(buffer: var Buffer, event: string, isPath = true) =
         field = parseFloat(val)
       elif field is Color:
         field = parseHtmlColor(val)
-  buffer.printTree(xml[0], props)
+  buffer.grouped buffer.printTree(xml[0], props)
 
 proc handler(_: EventPrinter, gameState: var GameState, str: string) =
   var
