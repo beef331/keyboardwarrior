@@ -398,17 +398,17 @@ proc handler(_: Fire, gameState: var GameState, input: string) =
       gameState.writeError(fmt"Cannot fire non existent system named {systemName}")
       return
 
-
+    let system = state.systems[systemName]
     case (let fireState = state.systems[systemName].fireState(); fireState)
     of NoTarget:
       gameState.writeError($fireState)
     of InsufficientlyCharged:
-      gameState.writeError($fireState % $state.systems[systemName].turnsTillCharged())
+      gameState.writeError($fireState % $system.turnsTillCharged())
     of None:
       {.warning: "Print out the target we're targetting".}
       let fireError = state.fire(systemName)
       if fireError != None:
-        gameState.writeError($fireError)
+        gameState.writeError($fireError % system.realSystem.name)
       else:
         gameState.buffer.put(fmt"Initiated firing sequence of {systemName}")
         gameState.buffer.newLine()
@@ -474,7 +474,7 @@ proc handler(_: Activate, gameState: var GameState, input: string) =
       gameState.writeError("Cannot charge system further")
     of NotCharged:
       let error = state.powerOn(InsensitiveString weaponName)
-      if error == NotEnoughPower:
+      if error != None:
         gameState.writeError($error)
     else:
       gameState.writeError("Not a chargable system.")

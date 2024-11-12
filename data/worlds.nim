@@ -34,6 +34,7 @@ type
     AlreadyUnpowered = "The system is already off."
     NotEnoughPower = "There is not enough power allocated for the system."
     InsufficientlyCharged = "Lacking charge need to wait $# turns."
+    AlreadyFiring = "Already firing the system $#"
 
   FireError* = enum
     None
@@ -393,11 +394,16 @@ proc combatHasEntityNamed*(world: World, combat: Combat, name: InsensitiveString
       target = state
       return true
 
+proc queuedUp(state: CombatState, system: CombatSystem, actions: set[ActionKind]): bool =
+  for action in state.actions:
+    if action.kind in actions and system == action.system:
+      return true
+
 proc powerOn*(state: CombatState, system: InsensitiveString): CombatInteractError =
   let system = state.systems[system]
   if state.unusedPower(system.kind) < system.realSystem.chargeEnergyCost:
     NotEnoughPower
-  elif Active in system.flags:
+  elif state.queuedUp(system, {Charge}):
     AlreadyPowered
   else:
     state.actions.add Action(
@@ -452,12 +458,19 @@ proc fire*(state: CombatState, system: InsensitiveString): CombatInteractError =
     InsufficientlyCharged
   elif state.unusedPower(system.kind) < system.realSystem.activateCost:
     NotEnoughPower
+  elif state.queuedUp(system, {ActionKind.Fire}):
+    AlreadyFiring
   else:
     state.actions.add Action(kind: Fire, system: system, cost: system.realSystem.activateCost)
+    system.flags.incl Fire
     None
 
 proc holdfire*(state: CombatState, system: InsensitiveString): CombatInteractError =
-  let sys {.byaddr.} = state.systems[system]
+  let system = state.systems[system]
+  for i, action in state.actions:
+    if action.kind == Fire and system == action.system:
+      state.actions.delete(i)
+      break
   None
 
 
@@ -504,17 +517,18 @@ proc endTurn*(combat: Combat) =
   nextState.actions.delete(toRemove)
 
 
+  toRemove.setLen(0)
 
   for state in combat.entityToCombat.values:
-    var toRemove: seq[int]
     for i, damage in state.damages.mpairs:
       if damage.handle(combat, state):
         toRemove.add i
 
     state.damages.delete(toRemove)
 
-  combat.turnOrder.addLast(ent)
   combat.activeEntity = combat.turnOrder.popFirst()
+  combat.turnOrder.addLast(combat.activeEntity)
+
 
 
 
