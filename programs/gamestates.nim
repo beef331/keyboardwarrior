@@ -457,6 +457,9 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
       gameState.showInput()
       gameState.promptedHello = true
 
+    gameState.buffer.clearLine()
+    gameState.showInput()
+
     if truss.inputs.isDownRepeating(KeycodeReturn)and gameState.input.str.len > 0:
       let name = gameState.popInput()
       gameState.screen.shipStack.add ControlledEntity(location: LocationId(0), entryId: 0) # Player is always first entity made

@@ -490,23 +490,24 @@ proc handle(action: var DamageEvent, combat: Combat, combatState: CombatState): 
 
 proc delete[T](s: var seq[T], inds: seq[int]) =
   for i in countDown(inds.high, 0):
-    s.delete(i)
+    s.delete(inds[i])
 
-proc endTurn*(combat: Combat) =
+proc endTurn*(combat: Combat, world: World) =
   let
-    ent = combat.turnOrder.peekFirst()
-    nextState = combat.entityToCombat[ent]
+    ent = combat.turnOrder.popFirst()
+    theState = combat.entityToCombat[ent]
 
   var toRemove: seq[int]
-  for i, action in nextState.actions.pairs:
+  for i, action in theState.actions.pairs:
     case action.kind
     of Fire:
       toRemove.add i
-      nextState.damages.add DamageEvent(
+      combat.entityToCombat[action.system.target].damages.add DamageEvent(
         damages: action.system.realSystem.damageDealt,
         target: action.system.target,
         targetSystem: action.system.targetSystem
       )
+      action.system.chargeAmount = 0
 
 
     of Charge:
@@ -514,7 +515,7 @@ proc endTurn*(combat: Combat) =
       if action.system.chargeState() == FullyCharged:
         toRemove.add i
 
-  nextState.actions.delete(toRemove)
+  theState.actions.delete(toRemove)
 
 
   toRemove.setLen(0)
@@ -525,11 +526,12 @@ proc endTurn*(combat: Combat) =
         toRemove.add i
 
     state.damages.delete(toRemove)
+    toRemove.setLen(0)
 
-  combat.activeEntity = combat.turnOrder.popFirst()
-  combat.turnOrder.addLast(combat.activeEntity)
+  combat.turnOrder.addLast(ent)
 
-
+  while combat.turnOrder.peekFirst() != ent:
+    combat.turnOrder.addLast(combat.turnOrder.popFirst())
 
 
 iterator systemsWithAny*(combatState: CombatState, flags: set[Systemflag]): CombatSystem =

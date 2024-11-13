@@ -443,7 +443,7 @@ storeCommand Fire().toTrait(CommandImpl), {InCombat}
 
 
 proc handler(_: TurnEnd, gameState: var GameState, input: string) =
-  gameState.activeCombat.endTurn()
+  gameState.activeCombat.endTurn(gameState.world)
 
 proc suggest(_: TurnEnd, gameState: GameState, input: string, ind: var int): string =
   ""
