@@ -80,7 +80,7 @@ iterator tableEntries*[T](
   var
     strings = newSeqOfCap[StyledText](values.len * T.paramCount)
     largest = newSeq[int](T.paramCount)
-    tickerSize = newSeqWith[int](T.paramCount, -1)
+    tickerSize = newSeqWith(T.paramCount, -1)
     alignFunctions = newSeqWith(T.paramCount, alignRight)
 
   var fieldInd = 0
