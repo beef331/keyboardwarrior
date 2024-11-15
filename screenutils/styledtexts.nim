@@ -131,3 +131,21 @@ proc putToLine*(buff: var Buffer, s: StyledText, modifier: proc(_: var GlyphProp
     if modifier != nil:
       modifier(props)
     result[1] += buff.put(result[0], msg, props, result[1])
+
+
+proc center*(text: var StyledText, size: int, spaceGlyph= " ") =
+  let spacesToAdd = size - text.len
+  text.fragments.insert(Fragment(msg: spaceGlyph.repeat(spacesToAdd div 2)), 0)
+  text.len += spacesToAdd div 2
+  text.add(styledText(spaceGlyph.repeat(spacesToAdd div 2)))
+
+proc alignRight*(s: StyledText, count: Natural, padding = ' '): StyledText =
+  result = s
+  if count > result.len:
+    result.fragments.insert(Fragment(msg: padding.repeat(count - result.len)), 0)
+    result.len = count
+
+proc alignLeft*(s: StyledText, count: Natural, padding = ' '): StyledText =
+  result = s
+  result.fragments.add(Fragment(msg: padding.repeat(count - result.len)))
+  result.len = count

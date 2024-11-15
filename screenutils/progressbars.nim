@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import screenrenderer, gradients
+import screenrenderer, gradients, styledtexts
 
 proc progressBar*(
   buffer: var Buffer,
@@ -44,3 +44,22 @@ proc progressBar*(
   buffer.put(rightEdge)
 
 
+proc progressBar*(
+  progress: float,
+  width: int,
+  label: string = "",
+  leftEdge = "[",
+  rightEdge = "]",
+  progressStr = "=",
+  emptyStr = " ",
+  gradient: Gradient = [(GlyphProperties(foreground: parseHtmlColor"white"), 0f)]
+): StyledText =
+  result.add label
+  result.add leftEdge
+  for i in 0..<width:
+    if i / width <= progress and progress != 0:
+      result.add styledText(progressStr, gradient.evaluate(i / width))
+    else:
+      result.add  styledText(emptyStr, gradient.evaluate(i / width))
+
+  result.add (rightEdge)

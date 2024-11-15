@@ -1,5 +1,5 @@
 import ../screenutils/screenrenderer
-import ../data/[spaceentity, insensitivestrings, worlds]
+import ../data/[spaceentity, insensitivestrings, worlds, useroptions]
 import pkg/[chroma, pixie, truss3D, traitor]
 import std/[tables, strutils, hashes, random, setutils]
 import pkg/truss3D/[inputs]
@@ -59,7 +59,7 @@ type
     fpsX, fpsY: int # Where we write to
     lastFpsBuffer: seq[Glyph]
 
-    curveAmount*: float32 # The curve amount
+    options*: UserOptions = UserOptions()
 
     promptedHello: bool
 
@@ -212,7 +212,7 @@ import programutils
 export programutils
 
 import
-  helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands, combats
+  helps, eventprinter, manuals, shops, statuses, sensors, textconfig, auxiliarycommands, combats, settings
 
 proc split(gameState: var GameState, screen: Screen, action: ScreenAction) =
   screen.action = Nothing
@@ -309,6 +309,7 @@ proc init*(_: typedesc[GameState]): GameState =
   result.rootScreen = Screen(kind: NoSplit, buffer: buff, w: result.screenWidth.float32, h: result.screenHeight.float32)
   result.screen = result.rootScreen
   inc result.screenCount
+  result.options = UserOptions()
 
 
 proc clearSuggestion(gameState: var GameState) =
@@ -417,8 +418,6 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
 
   let startShipCount = gameState.screen.shipStack.len
 
-  if startShipCount > 0:
-    gameState.buffer.properties = gameState.activeShipEntity.shipData.glyphProperties
 
   if truss.inputs.isDownRepeating(KeyCodeBackspace) and gameState.input.pos > 0 and gameState.input.str.len > 0:
     gameState.input.str.delete(gameState.input.pos - 1 .. gameState.input.pos - 1)
@@ -489,6 +488,12 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
         isActiveScreen = gameState.screen == screen
         oldScreen = gameState.screen
       gameState.screen = screen
+
+      gameState.buffer.foreground = color rgb(
+        gameState.options.screenR,
+        gameState.options.screenG,
+        gameState.options.screenB,
+      )
 
       if not screen.inProgram or Blocking in gameState.currentProgramFlags(gameState.screen):
         if truss.inputs.isDownRepeating(KeycodePageUp) and isActiveScreen: # Scrollup

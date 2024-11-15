@@ -7,7 +7,6 @@ type
   DebugCommand = object
   ExitCommand = object
   ClearCommand = object
-  CurveCommand = object
   ProgramCommand = object
   SplitVCommand = object
   SplitHCommand = object
@@ -59,27 +58,6 @@ proc handler(_: ClearCommand, gameState: var GameState, input: string) =
 proc suggest(_: ClearCommand, gs: GameState, input: string, ind: var int): string = discard
 
 storeCommand ClearCommand().toTrait(CommandImpl)
-
-
-proc name(_: CurveCommand): string = "curve"
-proc help(_: CurveCommand): string = "Adjust the curve amount"
-proc manual(_: CurveCommand): string = ""
-proc handler(_: CurveCommand, gameState: var GameState, amount: string) =
-  let amnt =
-    try:
-      parseFloat(amount.strip())
-    except CatchableError as e:
-      gameState.writeError(e.msg)
-      return
-  if amnt notin 0f..1f:
-    gameState.writeError("Expected value in `0..1` range.")
-  else:
-    gameState.curveAmount = amnt
-
-proc suggest(_: CurveCommand, gs: GameState, input: string, ind: var int): string = discard
-
-storeCommand CurveCommand().toTrait(CommandImpl)
-
 
 proc name(_: ProgramCommand): string = "programs"
 proc help(_: ProgramCommand): string = "Lists all running programs for the current ship"

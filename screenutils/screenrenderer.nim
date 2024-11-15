@@ -178,6 +178,15 @@ proc recalculateBuffer*(buff: var Buffer) =
 
 proc fontSize*(buff: Buffer): int =  int buff.atlas.font.size
 
+proc getColorIndex(buff: var Buffer, color: chroma.Color): int32 =
+  buff.colorInd[].withValue color, ind:
+    return int32 ind[]
+  do:
+    let colInd = buff.colors[].len
+    buff.colors[].add color
+    buff.colorInd[color] = colInd
+    buff.dirtiedColors = true
+    return int32 colInd
 
 proc getPropertyIndex(buff: var Buffer, prop: GlyphProperties): uint16 =
   buff.propToInd[].withValue prop, val:
@@ -217,7 +226,6 @@ proc initResources*(buff: var Buffer, font: Font, useFrameBuffer = false, seedNo
       newOpenSimplex(0)
   buff.useFrameBuffer = useFrameBuffer
   buff.recalculateBuffer()
-  discard buff.getPropertyIndex(buff.properties)
 
 proc initResources*(buff: var Buffer, fontPath: string, useFrameBuffer = false, seedNoise = true, fontSize = 80) =
   buff.initResources(readFont(fontPath), useFrameBuffer, seedNoise, fontSize)
@@ -263,16 +271,6 @@ proc setLineWidth*(buff: var Buffer, width: int) =
 proc setLineHeight*(buff: var Buffer, height: int) =
   buff.lineHeight = height
   buff.recalculateBuffer()
-
-proc getColorIndex(buff: var Buffer, color: chroma.Color): int32 =
-  buff.colorInd[].withValue color, ind:
-    return int32 ind[]
-  do:
-    let colInd = buff.colors[].len
-    buff.colors[].add color
-    buff.colorInd[color] = colInd
-    buff.dirtiedColors = true
-    return int32 colInd
 
 proc getFrameBufferTexture*(buff: Buffer): lent Texture = buff.frameBuffer.colourTexture
 
@@ -686,7 +684,7 @@ proc put*(buff: var Buffer, s: string | openarray[Glyph], props: GlyphProperties
     buff.cameraPos = buff.lines.len - buff.lineHeight
 
 proc put*(buff: var Buffer, line: Line, len: int, moveCamera = true, wrapped = false, getBuffer: static bool = false): auto =
-  buff.put(line.glyphs.toOpenArray(0, len - 1), GlyphProperties(), moveCamera, wrapped, getBuffer)
+  buff.put(line.glyphs.toOpenArray(0, len - 1), buff.properties, moveCamera, wrapped, getBuffer)
 
 
 proc put*(buff: var Buffer, s: string, moveCamera = true, wrapped = false) =
@@ -808,6 +806,13 @@ proc showCursor*(buffer: var Buffer, offset: int) =
 proc hideCursor*(buffer: var Buffer) =
   buffer.graphicCursorX = -1
   buffer.graphicCursorY = -1
+
+
+proc `foreground=`*(buff: var Buffer, color: Color) =
+  buff.properties.foreground = color
+  discard buff.getColorIndex(color)
+  discard buff.getPropertyIndex(buff.properties)
+  buff.dirtiedColors = true
 
 
 when isMainModule:

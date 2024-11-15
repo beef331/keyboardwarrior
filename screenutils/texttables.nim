@@ -23,17 +23,6 @@
 import std/[strutils, options, macros, sequtils, unicode, strbasics]
 import screenrenderer, styledtexts
 
-proc alignRight*(s: StyledText, count: Natural, padding = ' '): StyledText =
-  result = s
-  if count > result.len:
-    result.fragments.insert(Fragment(msg: padding.repeat(count - result.len)), 0)
-    result.len = count
-
-proc alignLeft*(s: StyledText, count: Natural, padding = ' '): StyledText =
-  result = s
-  result.fragments.add(Fragment(msg: padding.repeat(count - result.len)))
-  result.len = count
-
 type
   TableKind* = enum
     NewLine
@@ -81,7 +70,7 @@ iterator tableEntries*[T](
     strings = newSeqOfCap[StyledText](values.len * T.paramCount)
     largest = newSeq[int](T.paramCount)
     tickerSize = newSeqWith(T.paramCount, -1)
-    alignFunctions = newSeqWith(T.paramCount, alignRight)
+    alignFunctions = newSeqWith(T.paramCount, styledtexts.alignRight)
 
   var fieldInd = 0
   for name, field in default(T).fieldPairs:
