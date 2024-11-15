@@ -80,7 +80,7 @@ proc draw(truss: var Truss) =
         screenShader.setUniform("fontHeight", screen.buffer.fontSize, required = false)
         screenShader.setUniform("time", truss.time, required = false)
         screenShader.setUniform("screenSize", scrSize, required = false)
-        #screenShader.setUniform("curve", gameState.curveAmount)
+        screenShader.setUniform("curve", gameState.curveAmount)
         screenShader.setUniform("activeScreen", float32(screen == gameState.screen))
         render(rectModel)
 
