@@ -23,7 +23,7 @@ type
 
   Screen* = ref object
     x*, y*, w*, h*: float32
-    parent*: Screen
+    parent* {.cursor.} : Screen
     splitPercentage*: float32 = 1f
     case kind*: ScreenKind
     of NoSplit:

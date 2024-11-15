@@ -47,8 +47,8 @@ void main() {
   vec2 finalUv = fUv + uv - 0.5;
   float sdf = rectangle(finalUv, vec2(0.5));
   float closeness = mod(uv.y, screenTexelSize.y) / screenTexelSize.y;
-  float borderSize = -10/ length(texSize);
-  float outline = float(sdf > (-10 / length(texSize)) && sdf < (10 / length(texSize)));
+  float borderSize = -10 / length(texSize);
+  float outline = float(sdf > borderSize);
   float isActive = (activeScreen + 1) / 2;
   vec4 col = mix(vec4(0, 0.2, 0.8, 1), vec4(1, 1, 0, 1), isActive);
 

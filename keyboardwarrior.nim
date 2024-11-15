@@ -38,6 +38,8 @@ when appType == "lib":
 var
   gameState {.persistent.}: GameState
   screenShader {.persistent.}: WatchedShader
+  postProcessShader {.persistent.}: WatchedShader
+  tempBuffer {.persistent.}: FrameBuffer
   rectModel {.persistent.}: Model
 
 proc init(truss: var Truss) =
@@ -51,9 +53,12 @@ proc init(truss: var Truss) =
   rectModel = uploadData(modelData)
 
   screenShader = loadWatchedShader("vert.glsl", "screen.frag.glsl")
+  postProcessShader = loadWatchedShader("vert.glsl", "postprocess.frag.glsl")
+  tempBuffer = genFrameBuffer(truss.windowSize, tfRgba, wrapMode = ClampedToBorder)
 
 
 proc draw(truss: var Truss) =
+  tempBuffer.clear()
   for screen in gameState.screens:
     screen.buffer.render()
 
@@ -73,23 +78,35 @@ proc draw(truss: var Truss) =
 
     let mat = translate(pos) * scale(vec3(size, 0))
 
+
     if screenShader.shader.Gluint > 0:
-      with screenShader:
-        screenShader.setUniform("tex", screen.buffer.getFrameBufferTexture(), required = false)
-        screenShader.setUniform("mvp", mat, required = false)
-        screenShader.setUniform("fontHeight", screen.buffer.fontSize, required = false)
-        screenShader.setUniform("time", truss.time, required = false)
-        screenShader.setUniform("screenSize", scrSize, required = false)
-        screenShader.setUniform("curve", gameState.options.curveAmount)
-        screenShader.setUniform("activeScreen", float32(screen == gameState.screen))
-        render(rectModel)
+      with tempBuffer:
+        with screenShader:
+          setUniform("tex", screen.buffer.getFrameBufferTexture(), required = false)
+          setUniform("mvp", mat, required = false)
+          setUniform("fontHeight", screen.buffer.fontSize, required = false)
+          setUniform("time", truss.time, required = false)
+          setUniform("screenSize", scrSize, required = false)
+          setUniform("activeScreen", float32(screen == gameState.screen))
+          render(rectModel)
+
+  with postProcessShader:
+    setUniform("tex", tempBuffer.colourTexture, required = false)
+    setUniform("mvp", mat4()  * scale(vec3(2)) * translate(vec3(-0.5)), required = false)
+    setUniform("curve", gameState.options.curveAmount, required = false)
+    render(rectModel)
 
 
 
 when not defined(testing):
+  var lastScreenSize: IVec2
   proc update(truss: var Truss, dt: float32) =
+    if lastScreenSize != truss.windowSize:
+      tempBuffer.resize(truss.windowSize)
+
     gamestate.update(truss,dt)
     screenShader.reloadIfNeeded()
+    lastScreenSize = truss.windowSize
 else:
   import screenutils/pam
   import pkg/pixie/fileformats/png

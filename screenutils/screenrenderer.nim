@@ -171,7 +171,7 @@ proc recalculateBuffer*(buff: var Buffer) =
   if buff.lines.len == 0:
     buff.lines.add Line()
   if buff.useFrameBuffer:
-    buff.frameBuffer = genFrameBuffer(ivec2(buff.pixelWidth, buff.pixelHeight), tfRgba, wrapMode = ClampedToBorder)
+    buff.frameBuffer = genFrameBuffer(ivec2(buff.pixelWidth, buff.pixelHeight), tfRgba, wrapMode = ClampedToEdge)
 
     buff.useFrameBuffer = true
     buff.frameBufferSetup = true
