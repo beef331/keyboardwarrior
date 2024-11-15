@@ -807,14 +807,6 @@ proc hideCursor*(buffer: var Buffer) =
   buffer.graphicCursorX = -1
   buffer.graphicCursorY = -1
 
-
-proc `foreground=`*(buff: var Buffer, color: Color) =
-  buff.properties.foreground = color
-  discard buff.getColorIndex(color)
-  discard buff.getPropertyIndex(buff.properties)
-  buff.dirtiedColors = true
-
-
 when isMainModule:
   import texttables, styledtexts
   const clear = color(0, 0, 0, 0)

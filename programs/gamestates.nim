@@ -489,10 +489,16 @@ proc update*(gameState: var GameState, truss: var Truss, dt: float) =
         oldScreen = gameState.screen
       gameState.screen = screen
 
-      gameState.buffer.foreground = color rgb(
+      gameState.buffer.properties.foreground = color rgb(
         gameState.options.screenR,
         gameState.options.screenG,
         gameState.options.screenB,
+      )
+
+      gameState.buffer.properties.background = color rgb(
+        gameState.options.backgroundR,
+        gameState.options.backgroundG,
+        gameState.options.backgroundB,
       )
 
       if not screen.inProgram or Blocking in gameState.currentProgramFlags(gameState.screen):
