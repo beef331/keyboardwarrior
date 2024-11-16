@@ -27,21 +27,25 @@ proc handleInput[T: range; Y](val: var T, increment: Y, interaction: set[Interac
 
   val = newVal
 
-proc inspector(name: sink StyledText, val: range[0f..1f], width, lineWidth: int): StyledText =
+proc inspector(name: sink StyledText, val: range[0f..1f], width, lineWidth: int, gameState: GameState): StyledText =
   result = name
   result.add " "
   result.add val.formatFloat(precision = 2)
   result = result.alignLeft(lineWidth - width - 2)
 
-  result.add progressbar(val.float32, width)
+  result.add progressbar(val.float32, width, gradient = [(gameState.buffer.properties, 0f)])
 
-proc inspector[T: range](name: sink StyledText, val: T, width, lineWidth: int): StyledText =
+proc inspector[T: range](name: sink StyledText, val: T, width, lineWidth: int, gameState: GameState): StyledText =
   result = name
   result.add " "
   result.add $val
   result = result.alignLeft(lineWidth - width - 2)
 
-  result.add progressbar((val - T.low).float32 / T.high.float32, width)
+  result.add progressbar(
+    (val - T.low).float32 / T.high.float32,
+    width,
+    gradient = [(gameState.buffer.properties, 0f)]
+  )
 
 
 proc onExit(_: var UserOptions; gameState: var GameState) {.nimcall, nimcall.} = discard
@@ -91,7 +95,7 @@ proc update(opt: var UserOptions, gameState: var GameState, truss: var Truss, dt
           else:
             fieldName.styledText()
         gameState.buffer.put(
-          inspector(name, field, 15, gameState.buffer.lineWidth),
+          inspector(name, field, 15, gameState.buffer.lineWidth, gameState),
           modifier =
             if not isSelected:
               proc(props: var GlyphProperties) = props.foreground = props.foreground - 0.4

@@ -86,6 +86,9 @@ iterator screens*(gameState: var GameState): Screen =
 proc input(gameState: GameState): lent TextInput = gameState.screen.input
 proc input(gameState: var GameState): var TextInput = gameState.screen.input
 
+proc buffer*(gameState: GameState): lent Buffer =
+  gameState.screen.buffer
+
 proc buffer*(gameState: var GameState): var Buffer =
   gameState.screen.buffer
 
