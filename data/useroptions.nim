@@ -16,6 +16,7 @@ type
 
 
     curveAmount* {.title: "Customization", increment: 0.06.}: range[0f..1f] = 0
+    bloomAmount* {.increment: 0.06.}: range[0f..1f] = 0
     volume* {.increment: 0.05.}: range[0f..1f] = 0.1
 
     screenR* {.title: "Foreground", increment: 3u8, name: styledText("Red", GlyphProperties(foreground: parseHtmlColor"Red")).}: range[0u8..255u8] = 255u8

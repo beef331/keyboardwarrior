@@ -92,6 +92,7 @@ proc draw(truss: var Truss) =
 
   with postProcessShader:
     setUniform("tex", tempBuffer.colourTexture, required = false)
+    setUniform("bloomAmount", gameState.options.bloomAmount, required = false)
     setUniform("mvp", mat4()  * scale(vec3(2)) * translate(vec3(-0.5)), required = false)
     setUniform("curve", gameState.options.curveAmount, required = false)
     render(rectModel)

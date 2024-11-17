@@ -6,6 +6,7 @@ in vec2 fUv;
 uniform sampler2D tex;
 uniform vec2 screenSize;
 uniform float curve;
+uniform float bloomAmount;
 
 vec2 barrelUv(vec2 uv){
   uv -= 0.5;
@@ -42,5 +43,5 @@ void main() {
   blurCol +=  blur13(tex, theUv, vec2(textureSize(tex, 0)), vec2(1,1));
   blurCol /= 8;
   frag_colour = texture(tex, theUv);
-  frag_colour += (vec4(1) - frag_colour) * blurCol;
+  frag_colour += (vec4(1) - frag_colour) * blurCol * bloomAmount;
 }
