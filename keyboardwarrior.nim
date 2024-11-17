@@ -106,6 +106,7 @@ when not defined(testing):
 
     gamestate.update(truss,dt)
     screenShader.reloadIfNeeded()
+    postProcessShader.reloadIfNeeded()
     lastScreenSize = truss.windowSize
 else:
   import screenutils/pam
