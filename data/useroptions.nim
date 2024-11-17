@@ -26,3 +26,5 @@ type
     backgroundR* {.title: "Background", increment: 3u8, name: styledText("Red", GlyphProperties(foreground: parseHtmlColor"Red")).}: range[0u8..255u8] = 0u8
     backgroundG* {.increment: 3u8, name: styledText("Green", GlyphProperties(foreground: parseHtmlColor"Green")).}: range[0u8..255u8] = 0u8
     backgroundB* {.increment: 3u8, name: styledText("Blue", GlyphProperties(foreground: parseHtmlColor"Blue")).}: range[0u8..255u8] = 0u8
+
+

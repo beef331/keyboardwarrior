@@ -23,8 +23,6 @@ when appType == "lib":
         newVal.deserialise(state, current["data"])
         val = newVal.toTrait(T)
 
-
-
   proc serialise*(val: var (proc), root: JsonNode): JsonNode = nil
   proc deserialise*(val: var (proc), state: var DeserialiseState, current: JsonNode) = discard
 

@@ -41,7 +41,7 @@ proc paramCount(T: typedesc[object or tuple]): int =
     when not field.hasCustomPragma(tableSkip):
       inc result
 
-proc toPrintedName(name: string): string =
+proc toPrintedName*(name: string): string =
   let firstCap = name.find({'A'..'Z'})
   if firstCap != -1:
     result = name.toOpenArray(0, firstCap - 1).capitalize()

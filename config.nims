@@ -11,3 +11,5 @@ when appType == "lib":
   switch("warnings", "off")
   switch("hints", "off")
 --define:useMalloc
+--cc:clang
+--passC:"-fuse-ld=mold"

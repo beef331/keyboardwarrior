@@ -51,7 +51,6 @@ proc inspector[T: range](name: sink StyledText, val: T, width, lineWidth: int, g
 proc onExit(_: var UserOptions; gameState: var GameState) {.nimcall, nimcall.} = discard
 
 proc update(opt: var UserOptions, gameState: var GameState, truss: var Truss, dt: float32, flags: ProgramFlags) =
-
   var interact: set[Interaction]
 
   if TakeInput in flags:
@@ -93,7 +92,7 @@ proc update(opt: var UserOptions, gameState: var GameState, truss: var Truss, dt
           when field.hasCustomPragma(useroptions.name):
             field.getCustomPragmaVal(useroptions.name)
           else:
-            fieldName.styledText()
+            fieldName.toPrintedName().styledText()
         gameState.buffer.put(
           inspector(name, field, 15, gameState.buffer.lineWidth, gameState),
           modifier =
