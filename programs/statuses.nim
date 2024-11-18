@@ -1,12 +1,25 @@
 {.used.}
 import gamestates
 import ../data/[spaceentity, inventories, worlds, insensitivestrings]
-import ../screenutils/[texttables]
+import ../screenutils/[texttables, styledtexts]
 import std/[strutils, strformat, tables]
 
 
-proc healthFormat(data: tuple[current, max: int]): string =
-  $data.current & "/" & $data.max
+proc healthFormat(data: tuple[current, max: int]): StyledText =
+  let progress =
+    if data.max <= 0:
+      0f
+    else:
+      data.current / data.max
+
+  styledText(
+    $data.current & "/" & $data.max,
+    GlyphProperties(
+      foreground: lerp(parseHtmlColor"red", parseHtmlColor"lime", progress),
+      shakeSpeed: 1f,
+      shakeStrength: 0.25f * (1 - progress)
+    )
+  )
 
 type
   CombatStatusEntry = object
@@ -22,14 +35,8 @@ proc printStatus(gameState: var GameState, combatState: CombatState) =
     data: seq[CombatStatusEntry]
     properties: seq[GlyphProperties]
 
-  data.add CombatStatusEntry(name: gameState.world.getEntity(combatState.entity).name & " hull", health: (combatState.hull, combatState.maxHull))
-  properties.add gameState.buffer.properties
-  properties.add GlyphProperties(foreground: lerp(parseHtmlColor"red", parseHtmlColor"lime", combatState.hull / combatState.maxHull))
-
   for sys in combatState.systems.values:
     data.add CombatStatusEntry(name: sys.realSystem.name.string, health: (sys.realSystem.currentHealth, sys.realSystem.maxHealth))
-    properties.add gameState.buffer.properties
-    properties.add GlyphProperties(foreground: lerp(parseHtmlColor"red", parseHtmlColor"lime", sys.realSystem.currentHealth / sys.realSystem.maxHealth))
 
 
   gameState.buffer.printTable(data)

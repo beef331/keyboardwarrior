@@ -17,6 +17,7 @@ type
     entryId*: int
 
   CombatSystemKind* = enum
+    Hull
     Weapons
     Shields
     Logistics
@@ -81,8 +82,7 @@ type
 
 
   CombatState* = ref object
-    hull*: int
-    maxHull*: int
+    hull*: CombatSystem
     shield*: int
     maxShield*: int
     energyDistribution*: array[CombatSystemKind, int]
@@ -203,12 +203,11 @@ proc init*(world: var World, playerName, seed: string) =
       kind: Ship,
       name: playerName,
       x: 500,
-      currentHull: 100,
-      maxHull: 100,
       shipData:
         ShipData(
           glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
           systems: @[
+            System(name: insStr"Hull", kind: Hull, currentHealth: 20, maxHealth: 20),
             System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
             System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
             System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
@@ -238,12 +237,11 @@ proc init*(world: var World, playerName, seed: string) =
         SpaceEntity(
           name: startLocation.nextName("testerino"),
           kind: Ship,
-          currentHull: 100,
-          maxHull: 100,
           shipData:
             ShipData(
               glyphProperties: GlyphProperties(foreground: parseHtmlColor("white"), background: parseHtmlColor("black")),
               systems: @[
+                System(name: insStr"Hull", kind: Hull, currentHealth: 20, maxHealth: 20),
                 System(name: insStr"Sensor-Array", kind: Sensor, sensorRange: 50),
                 System(name: insStr"Hacker", kind: Hacker, hackSpeed: 1, hackRange: 100),
                 System(name: insStr"Warp-Core", kind: Generator, maxHealth: 10, currentHealth: 10, powerGeneration: 15),
@@ -319,8 +317,11 @@ func tryJoinCombat(world: var World, combat: var Combat, initiator: ControlledEn
 
 func startCombat(state: sink CombatState, entity: SpaceEntity): CombatState =
   result = move state
-  result.hull  = entity.currentHull
-  result.maxHull = entity.maxHull
+  result.hull  = CombatSystem(
+    kind: Hull,
+    realSystem: entity.hull,
+  )
+
   result.maxEnergyCount = entity.generatedPower()
   result.energyCount = result.maxEnergyCount
 

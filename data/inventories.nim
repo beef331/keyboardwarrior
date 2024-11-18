@@ -26,14 +26,13 @@ type
     amount*: int
 
   SystemKind* = enum
+    Hull
     Sensor
     WeaponBay ## Turrets, Missiles bays, ...
     ToolBay ## Drills, welders, ...
     Thruster
     Shield
     Nanites
-    AutoLoader
-    AutoTargetting
     Hacker
     Inventory
     Generator ## Generates power
@@ -95,10 +94,6 @@ type
     of Thruster:
       acceleration*: float32
       maxSpeed*: float32
-    of AutoLoader:
-      discard
-    of AutoTargetting:
-      autoTarget*: string
     of Hacker:
       hackSpeed*: int
       hackRange*: int
@@ -107,6 +102,8 @@ type
       maxWeight*: int # Exceeding this causes the ship to slow down
     of Generator:
       powerGeneration*: int
+    of Hull:
+      discard
 
 
 proc doesCharge*(system: System): bool = system.chargeTurns > 0
