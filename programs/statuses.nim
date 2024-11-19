@@ -1,6 +1,6 @@
 {.used.}
 import gamestates
-import ../data/[spaceentity, inventories, worlds, insensitivestrings]
+import ../data/[spaceentity, inventories, worlds, insensitivestrings, combatstates]
 import ../screenutils/[texttables, styledtexts]
 import std/[strutils, strformat, tables]
 
@@ -16,8 +16,8 @@ proc healthFormat(data: tuple[current, max: int]): StyledText =
     $data.current & "/" & $data.max,
     GlyphProperties(
       foreground: lerp(parseHtmlColor"red", parseHtmlColor"lime", progress),
-      shakeSpeed: 1f,
-      shakeStrength: 0.25f * (1 - progress)
+      shakeSpeed: 20f,
+      shakeStrength: 1f * (1 - progress)
     )
   )
 
@@ -40,10 +40,6 @@ proc printStatus(gameState: var GameState, combatState: CombatState) =
 
 
   gameState.buffer.printTable(data)
-
-
-
-
 
 
 proc handler(_: CombatStatus, gameState: var GameState, input: string) =

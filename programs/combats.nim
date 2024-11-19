@@ -1,7 +1,7 @@
 {.used.}
 import gamestates
 import std/[strscans, setutils, strbasics, strformat, strutils, tables, enumerate, options]
-import "$projectdir"/data/[spaceentity, insensitivestrings, worlds, inventories]
+import "$projectdir"/data/[spaceentity, insensitivestrings, worlds, inventories, combatstates]
 import "$projectdir"/utils/todoer
 import "$projectdir"/screenutils/[styledtexts, texttables]
 import pkg/[truss3D, chroma]
@@ -78,7 +78,8 @@ proc manual(_: Combat): string = ""
 storeCommand Combat().toTrait(CommandImpl), {InWorld}
 
 
-const systemColor = [
+const systemColor: array[CombatSystemKind, Color] = [
+  Hull: parseHtmlColor"white",
   Weapons: parseHtmlColor"orange",
   Shields: parseHtmlColor"blue",
   Logistics: parseHtmlColor"green",

@@ -5,6 +5,10 @@ import quadtrees, inventories, insensitivestrings
 type
   LocationId* = distinct int
 
+  ControlledEntity* = ref object
+    location*: LocationId
+    entryId*: int
+
   EntityKind* = enum
     Asteroid
     Ship
@@ -63,6 +67,17 @@ type
 
 
   NotSystem* = distinct set[SystemKind]
+
+proc `==`*(a, b: LocationId): bool = a.int == b.int
+
+proc `==`*(a, b: ControlledEntity): bool =
+  (a.isNil and b.isNil) or (not(a.isNil) and not(b.isNil) and a[] == b[])
+
+proc hash*(ent: ControlledEntity): Hash =
+  if ent.isNil:
+    hash(0)
+  else:
+    hash(ent[])
 
 proc currentWeight*(system: System): int =
   assert system.kind == Inventory

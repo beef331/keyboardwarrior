@@ -1,5 +1,5 @@
 import ../screenutils/screenrenderer
-import ../data/[spaceentity, insensitivestrings, worlds, useroptions]
+import ../data/[spaceentity, insensitivestrings, worlds, useroptions, combatstates]
 import pkg/[chroma, pixie, truss3D, traitor]
 import std/[tables, strutils, hashes, random, setutils]
 import pkg/truss3D/[inputs]
